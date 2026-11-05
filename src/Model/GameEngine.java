@@ -122,7 +122,7 @@ public final class GameEngine {
         if (RankingManager.rankIfCompleted(state, player)) {
             state.log(player.name() + " סיים/ה במקום " + player.rank() + ".");
             if (RankingManager.isGameOver(state)) {
-                endGame();
+                endGame(move);
                 return;
             }
         }
@@ -132,10 +132,10 @@ public final class GameEngine {
         } else {
             passTurn();
         }
-        notifyChanged();
+        notifyMoved(move);
     }
 
-    private void endGame() {
+    private void endGame(Move move) {
         gameClock.stop();
         List<GameResult.Standing> standings = new ArrayList<>();
         for (Player player : RankingManager.finalStandings(state)) {
@@ -148,7 +148,7 @@ public final class GameEngine {
         state.setLegalMoves(List.of());
         state.setPhase(GameState.Phase.GAME_OVER);
         state.log("המשחק הסתיים. המנצח/ת: " + result.winner().name());
-        notifyChanged();
+        notifyMoved(move);
         for (GameListener listener : List.copyOf(listeners)) listener.onGameOver(result);
     }
 
@@ -161,6 +161,12 @@ public final class GameEngine {
         if (move.release()) return player.name() + " הוציא/ה את כלי " + piece.number() + " מהטירה.";
         String text = player.name() + " הזיז/ה את כלי " + piece.number() + " " + move.steps() + " צעדים";
         return move.partial() ? text + " ונעצר/ה לפני חסימה." : text + ".";
+    }
+
+    /** Notify presentation observers of the committed move before the new state. */
+    private void notifyMoved(Move move) {
+        for (GameListener listener : List.copyOf(listeners)) listener.onPieceMoved(move);
+        notifyChanged();
     }
 
     private void notifyChanged() {

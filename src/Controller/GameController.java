@@ -59,6 +59,15 @@ public final class GameController {
 
     /** FR-49: after the game ends only the results screen is shown. */
     private void showResults(GameResult result) {
+        // Keep the final piece and finish celebration visible before changing screens.
+        if (boardView != null) {
+            boardView.whenVisualEffectsFinish(() -> showResultsNow(result));
+        } else {
+            showResultsNow(result);
+        }
+    }
+
+    private void showResultsNow(GameResult result) {
         if (boardView != null) boardView.stopClock();
         Dialogs.info(window.component(), "סיום המשחק", "המנצח/ת: " + result.winner().name());
         leaveCurrentGame();
