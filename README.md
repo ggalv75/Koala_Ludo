@@ -5,12 +5,9 @@
 ## הרצה
 
 - נדרשת Java 17 ומעלה.
-- ה-JAR לא נשמר בגיט. בונים אותו קודם עם `build.bat` (או `./build.sh`).
-- Windows: לחיצה כפולה על `LudoKoala.jar`, או `run.bat` (מציג שגיאה אם Java חסרה).
-- macOS/Linux: `java -jar LudoKoala.jar` או `./run.sh`.
+- ה-JAR לא נשמר בגיט. בונים אותו ב-Eclipse: File → Export → Java → Runnable JAR file, עם Launch configuration של `LudoApplication`, ושומרים בשם `LudoKoala.jar`.
+- הרצה ב-Windows: לחיצה כפולה על `LudoKoala.jar`, או `java -jar LudoKoala.jar` משורת הפקודה.
 - המשחק לא משתמש בקבצים חיצוניים או בנתיבים מקומיים, ולכן רץ מכל תיקייה (NFR-07).
-
-בנייה מחדש של ה-JAR: `build.bat` ב-Windows או `./build.sh`.
 
 ## Eclipse
 
@@ -52,7 +49,7 @@
 
 | חבר צוות | קבצים | דרישות |
 |---|---|---|
-| דור | `Controller/*`, `View/*`, `build.*`, `run.*`, קבצי Eclipse | 3.4.1–3.4.2, FR-01–05, FR-15, FR-23, FR-48–49 (צד התצוגה) |
+| דור | `Controller/*`, `View/*`, קבצי Eclipse | 3.4.1–3.4.2, FR-01–05, FR-15, FR-23, FR-48–49 (צד התצוגה) |
 | עומר | `Difficulty`, `GameRules`, `SetupValidator`, `Player`, `PlayerColor`, `Piece`, `Position`, `Cell`, `CellType`, `Board`, `BoardFactory`, `InteractionRules` | FR-01–11, FR-14, FR-28–30, FR-32 |
 | גל | `Dice`, `DiceRoll`, `TurnManager`, `RankingManager`, `GameClock`, `GameResult`, `GameListener`, `GameEngine` (זרימת התור) | FR-15–20, FR-45–48 |
 | דיאנה | `MoveValidator`, `Move`, `GameState`, `GameEngine` (ביצוע מהלך ואכילה) | FR-23–27, FR-31 |
