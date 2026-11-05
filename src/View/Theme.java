@@ -45,6 +45,20 @@ public final class Theme {
         };
     }
 
+/**
+ * Stronger colours for home-path squares.
+ * Keeps home paths visually distinct from regular cells.
+ */
+public static Color homePathColorOf(PlayerColor color) {
+    return switch (color) {
+        case RED -> new Color(248, 159, 154);
+        case GREEN -> new Color(153, 213, 157);
+        case YELLOW -> new Color(255, 221, 119);
+        case BLUE -> new Color(151, 203, 248);
+    };
+}
+
+
     public static JLabel label(String text, int size, boolean bold) {
         JLabel label = new JLabel(text);
         label.setFont(font(size, bold));
