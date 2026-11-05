@@ -27,7 +27,9 @@ public final class GameBoardView extends JPanel implements GameListener {
     private final Timer clockTimer;
     private GameState displayedState;
     private Move pendingMove;
+    private PieceInteractionEvent pendingInteraction;
 
+    /** Build the game UI and connect it to Controller callbacks. */
     public GameBoardView(LongSupplier elapsedSeconds, Runnable onRoll, IntConsumer onPieceClick, Runnable onExit) {
         this.elapsedSeconds = elapsedSeconds;
         this.canvas = new BoardCanvas(onPieceClick);
@@ -52,6 +54,7 @@ public final class GameBoardView extends JPanel implements GameListener {
         clockTimer.start();
     }
 
+    /** Build the status, die, players and history side panel. */
     private JPanel createSidePanel(Runnable onRoll) {
         JPanel side = new JPanel();
         side.setLayout(new BoxLayout(side, BoxLayout.Y_AXIS));
@@ -62,7 +65,7 @@ public final class GameBoardView extends JPanel implements GameListener {
         info.add(clock);
         info.add(level);
         info.add(turn);
-        JCheckBox animations = new JCheckBox("אנימציות תנועה", true);
+        JCheckBox animations = new JCheckBox("אנימציות תנועה ואינטראקציה", true);
         animations.setOpaque(false);
         animations.setFont(Theme.font(13, false));
         animations.addActionListener(e -> {
@@ -112,6 +115,7 @@ public final class GameBoardView extends JPanel implements GameListener {
         return side;
     }
 
+    /** Set a consistent width and height for a side panel section. */
     private static JComponent fullWidth(JComponent component, int height) {
         component.setAlignmentX(Component.CENTER_ALIGNMENT);
         component.setMinimumSize(new Dimension(0, height));
@@ -121,15 +125,24 @@ public final class GameBoardView extends JPanel implements GameListener {
     }
 
     @Override
+    /** Remember a committed movement until its state update arrives. */
     public void onPieceMoved(Move move) {
         pendingMove = move; // next onStateChanged contains the committed game state
     }
 
+    /** Cache semantic interaction effects until the committed state notification arrives. */
+    @Override
+    public void onPieceInteraction(PieceInteractionEvent event) {
+        pendingInteraction = event;
+    }
+
+    /** Refresh the board using the Model's state and any completed movement events. */
     @Override
     public void onStateChanged(GameState state) {
         displayedState = state;
-        canvas.setState(state, pendingMove);
+        canvas.setState(state, pendingMove, pendingInteraction);
         pendingMove = null;
+        pendingInteraction = null;
         if (canvas.isBusy()) canvas.whenEffectsFinish(this::updateRollButton);
         clock.setText(GameClock.format(elapsedSeconds.getAsLong()));
         level.setText("רמת קושי: " + state.difficulty().displayName());
@@ -147,6 +160,7 @@ public final class GameBoardView extends JPanel implements GameListener {
         log.applyComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
     }
 
+    /** Refresh player progress and ranking labels. */
     private void updatePlayers(GameState state) {
         playersList.removeAll();
         for (Player player : state.players()) {
@@ -162,6 +176,7 @@ public final class GameBoardView extends JPanel implements GameListener {
         playersList.repaint();
     }
 
+    /** Disable rolling whenever the rules or an animation forbid it. */
     private void updateRollButton() {
         rollButton.setEnabled(displayedState != null
                 && displayedState.phase() == GameState.Phase.WAITING_FOR_ROLL

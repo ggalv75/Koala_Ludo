@@ -2,48 +2,50 @@ package Model;
 
 import java.util.*;
 
-/** Interactions between pieces: capture (FR-28), protection (FR-29) and Double Block (FR-30, FR-32). */
+/** Centralizes capture, protected squares, and Double Block rules (FR-28–FR-32). */
 public final class InteractionRules {
+    /** Prevent construction of this rules utility. */
     private InteractionRules() { }
 
-    /** Pieces standing on the given square (pieces in a castle or the finish area are never on a square). */
+    /** Return all on-board pieces occupying the physical square. */
     public static List<Piece> piecesAt(GameState state, Position square) {
+        Objects.requireNonNull(state);
+        if (square == null) return List.of();
         List<Piece> found = new ArrayList<>();
-        if (square == null) return found;
         for (Piece piece : state.pieces()) {
             if (square.equals(state.positionOf(piece))) found.add(piece);
         }
-        return found;
+        return List.copyOf(found);
     }
 
-    /**
-     * FR-30: two or more pieces of the same player on one square form a Double Block, on any square type.
-     * FR-32: the block exists only while at least two of them remain, so it is recomputed every time.
-     */
+    /** Return every owner with two or more pieces on the same square (FR-30/FR-32). */
+    public static Set<Integer> blockOwners(GameState state, Position square) {
+        if (square == null) return Set.of();
+        Map<Integer, Integer> counts = new HashMap<>();
+        for (Piece piece : piecesAt(state, square)) {
+            counts.merge(piece.ownerIndex(), 1, Integer::sum);
+        }
+        Set<Integer> owners = new TreeSet<>();
+        counts.forEach((owner, count) -> {
+            if (count >= 2) owners.add(owner);
+        });
+        return Collections.unmodifiableSet(owners);
+    }
+
+    /** Detect whether at least one Double Block occupies the square (FR-30). */
     public static boolean isDoubleBlock(GameState state, Position square) {
-        return blockOwner(state, square).isPresent();
+        return !blockOwners(state, square).isEmpty();
     }
 
-    /** True when an opponent of {@code movingOwner} holds a Double Block on the square. */
+    /** Reject landing on or crossing any opponent's Double Block (FR-30/FR-31). */
     public static boolean hasOpponentDoubleBlock(GameState state, int movingOwner, Position square) {
-        Optional<Integer> owner = blockOwner(state, square);
-        return owner.isPresent() && owner.get() != movingOwner;
+        return blockOwners(state, square).stream().anyMatch(owner -> owner != movingOwner);
     }
 
-    private static Optional<Integer> blockOwner(GameState state, Position square) {
-        Map<Integer, Integer> perOwner = new HashMap<>();
-        for (Piece piece : piecesAt(state, square)) perOwner.merge(piece.ownerIndex(), 1, Integer::sum);
-        return perOwner.entrySet().stream()
-                .filter(entry -> entry.getValue() >= 2)
-                .map(Map.Entry::getKey)
-                .findFirst();
-    }
-
-    /**
-     * FR-28 / FR-29: a piece that lands on an unprotected square holding exactly one opponent piece
-     * captures it. Start, safe and home squares are protected, so pieces there can share the square.
-     */
+    /** Find the sole capturable opposing piece on an unprotected square (FR-28/FR-29). */
     public static Optional<Piece> capturableOpponent(GameState state, Piece arriving) {
+        Objects.requireNonNull(state);
+        Objects.requireNonNull(arriving);
         Position square = state.positionOf(arriving);
         if (square == null) return Optional.empty();
         Cell cell = state.board().cellAt(square);
@@ -53,5 +55,14 @@ public final class InteractionRules {
             if (piece.ownerIndex() != arriving.ownerIndex()) opponents.add(piece);
         }
         return opponents.size() == 1 ? Optional.of(opponents.get(0)) : Optional.empty();
+    }
+
+    /** Detect a protected landing shared with an opponent without capturing it (FR-29). */
+    public static boolean sharesProtectedSquareWithOpponent(GameState state, Piece arriving) {
+        Position square = state.positionOf(arriving);
+        if (square == null) return false;
+        Cell cell = state.board().cellAt(square);
+        return cell != null && cell.isProtected() && piecesAt(state, square).stream()
+                .anyMatch(piece -> piece.ownerIndex() != arriving.ownerIndex());
     }
 }

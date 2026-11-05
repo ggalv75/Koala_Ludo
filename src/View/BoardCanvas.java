@@ -22,6 +22,7 @@ public final class BoardCanvas extends JPanel {
     private static final long LEG_DURATION_NS = 130_000_000L;
     private static final long RELEASE_DURATION_NS = 400_000_000L;
     private static final long CELEBRATION_DURATION_NS = 620_000_000L;
+    private static final long INTERACTION_DURATION_NS = 540_000_000L;
 
     private GameState state;
     private final IntConsumer onPieceClick;
@@ -32,6 +33,8 @@ public final class BoardCanvas extends JPanel {
     private int hoveredPieceId = -1;
     private Motion motion;
     private Celebration celebration;
+    private PieceInteractionEvent pendingInteraction;
+    private InteractionFx interactionFx;
     private int originX;
     private int originY;
     private int cell;
@@ -39,7 +42,9 @@ public final class BoardCanvas extends JPanel {
     private record DrawnPiece(int id, int x, int y, int radius) { }
     private record Motion(Move move, PlayerColor color, long startedAt, long duration) { }
     private record Celebration(int pieceId, PlayerColor color, long startedAt) { }
+    private record InteractionFx(PieceInteractionEvent event, long startedAt) { }
 
+    /** Register mouse listeners and initialize the animation timer. */
     public BoardCanvas(IntConsumer onPieceClick) {
         this.onPieceClick = Objects.requireNonNull(onPieceClick);
         setBackground(Theme.SURFACE);
@@ -47,16 +52,19 @@ public final class BoardCanvas extends JPanel {
         effectsTimer = new javax.swing.Timer(FRAME_DELAY_MS, e -> tick());
         effectsTimer.setCoalesce(true);
         addMouseListener(new MouseAdapter() {
+            /** Forward clicks to the controlled click handler. */
             @Override public void mouseClicked(MouseEvent e) { handleClick(e.getPoint()); }
+            /** Clear route previews when the pointer exits the board. */
             @Override public void mouseExited(MouseEvent e) { updateHover(-1); }
         });
         addMouseMotionListener(new MouseMotionAdapter() {
+            /** Update the hovered pawn while the cursor moves. */
             @Override public void mouseMoved(MouseEvent e) { handleHover(e.getPoint()); }
         });
     }
 
-    /** Keep movement visual-only: the Model has already committed its legal Move. */
-    public void setState(GameState state, Move committedMove) {
+    /** Render an authoritative state and optionally animate its committed move and interaction. */
+    public void setState(GameState state, Move committedMove, PieceInteractionEvent interaction) {
         this.state = Objects.requireNonNull(state);
         updateHover(-1);
         if (committedMove != null && animationsEnabled) {
@@ -64,14 +72,19 @@ public final class BoardCanvas extends JPanel {
             int legs = committedMove.release() ? 1 : Math.max(1, committedMove.toStep() - committedMove.fromStep());
             long duration = committedMove.release() ? RELEASE_DURATION_NS : legs * LEG_DURATION_NS;
             motion = new Motion(committedMove, piece.color(), System.nanoTime(), duration);
+            pendingInteraction = interaction != null && interaction.hasVisualEffect() ? interaction : null;
+            interactionFx = null;
             celebration = null;
         }
         updateTimer();
         repaint();
     }
 
-    /** Legacy convenience for initial game state and ordinary notifications. */
-    public void setState(GameState state) { setState(state, null); }
+    /** Preserve the previous movement-only API for existing tests and callers. */
+    public void setState(GameState state, Move committedMove) { setState(state, committedMove, null); }
+
+    /** Accept ordinary state refreshes without starting a new animation. */
+    public void setState(GameState state) { setState(state, null, null); }
 
     /** Disabling animations also provides a reduced-motion option for accessibility. */
     public void setAnimationsEnabled(boolean enabled) {
@@ -81,13 +94,16 @@ public final class BoardCanvas extends JPanel {
             boolean hadEffects = isBusy();
             motion = null;
             celebration = null;
+            pendingInteraction = null;
+            interactionFx = null;
             if (hadEffects) completeVisualEffects();
         }
         updateTimer();
         repaint();
     }
 
-    public boolean isBusy() { return motion != null || celebration != null; }
+    /** Prevent user input until all sequential visual effects finish. */
+    public boolean isBusy() { return motion != null || celebration != null || interactionFx != null; }
 
     /** Used by Controller to keep the final-piece animation visible before ResultsView. */
     public void whenEffectsFinish(Runnable continuation) {
@@ -101,22 +117,30 @@ public final class BoardCanvas extends JPanel {
         effectsTimer.stop();
         motion = null;
         celebration = null;
+        pendingInteraction = null;
+        interactionFx = null;
         onEffectsFinished.clear();
         updateHover(-1);
     }
 
+    /** Run callbacks after every visual effect has finished. */
     private void completeVisualEffects() {
         List<Runnable> callbacks = List.copyOf(onEffectsFinished);
         onEffectsFinished.clear();
         for (Runnable callback : callbacks) callback.run();
     }
 
+    /** Advance animation phases and refresh the canvas on the Swing event thread. */
     private void tick() {
         long now = System.nanoTime();
         boolean wasBusy = isBusy();
         if (motion != null && now - motion.startedAt() >= motion.duration()) {
             Motion completed = motion;
             motion = null;
+            if (pendingInteraction != null) {
+                interactionFx = new InteractionFx(pendingInteraction, now);
+                pendingInteraction = null;
+            }
             if (state != null && completed.move().toStep() == state.board().finishStep()) {
                 celebration = new Celebration(completed.move().pieceId(), completed.color(), now);
             }
@@ -124,11 +148,15 @@ public final class BoardCanvas extends JPanel {
         if (celebration != null && now - celebration.startedAt() >= CELEBRATION_DURATION_NS) {
             celebration = null;
         }
+        if (interactionFx != null && now - interactionFx.startedAt() >= INTERACTION_DURATION_NS) {
+            interactionFx = null;
+        }
         updateTimer();
         repaint();
         if (wasBusy && !isBusy()) completeVisualEffects();
     }
 
+    /** Run the render timer only while a visible effect is needed. */
     private void updateTimer() {
         boolean shouldRun = isBusy() || (animationsEnabled && state != null
                 && state.phase() == GameState.Phase.WAITING_FOR_MOVE && !state.legalMoves().isEmpty());
@@ -136,6 +164,7 @@ public final class BoardCanvas extends JPanel {
         if (!shouldRun && effectsTimer.isRunning()) effectsTimer.stop();
     }
 
+    /** Forward a clicked piece to the Controller when no animation is playing. */
     private void handleClick(Point point) {
         if (isBusy()) return;
         DrawnPiece firstHit = null;
@@ -152,6 +181,7 @@ public final class BoardCanvas extends JPanel {
         if (firstHit != null) onPieceClick.accept(firstHit.id());
     }
 
+    /** Preview the actual legal move of the pawn under the pointer. */
     private void handleHover(Point point) {
         if (isBusy() || state == null || state.phase() != GameState.Phase.WAITING_FOR_MOVE) {
             updateHover(-1);
@@ -168,6 +198,7 @@ public final class BoardCanvas extends JPanel {
         updateHover(-1);
     }
 
+    /** Update the cursor and redraw only when the hovered pawn changes. */
     private void updateHover(int pieceId) {
         if (hoveredPieceId == pieceId) return;
         hoveredPieceId = pieceId;
@@ -176,6 +207,7 @@ public final class BoardCanvas extends JPanel {
     }
 
     @Override
+    /** Draw the board, previews, pieces and non-authoritative visual effects. */
     protected void paintComponent(Graphics graphics) {
         super.paintComponent(graphics);
         if (state == null) return;
@@ -194,14 +226,17 @@ public final class BoardCanvas extends JPanel {
         drawCenter(g, board);
         drawPathPreview(g, board);
         drawPieces(g, board);
+        drawInteractionEffects(g, board);
         drawFinishCelebration(g, board);
         g.dispose();
     }
 
+    /** Convert a board position into its pixel rectangle. */
     private Rectangle rect(Position p) {
         return new Rectangle(originX + p.col() * cell, originY + p.row() * cell, cell, cell);
     }
 
+    /** Paint the colored castle area of a player. */
     private void drawCastle(Graphics2D g, Board board, PlayerColor color) {
         Rectangle r = rect(board.castleCorner(color));
         int size = cell * 6;
@@ -212,6 +247,7 @@ public final class BoardCanvas extends JPanel {
         g.drawRoundRect(r.x + 2, r.y + 2, size - 4, size - 4, cell, cell);
     }
 
+    /** Paint one board cell according to its semantic type. */
     private void drawCell(Graphics2D g, Position position, Cell c) {
         Rectangle r = rect(position);
         Color fill = switch (c.type()) {
@@ -237,23 +273,37 @@ public final class BoardCanvas extends JPanel {
         }
     }
 
-    /** FR-30: a ring in the owner's colour marks a Double Block. */
+    /** Draw every active Double Block, including simultaneous owners on protected squares. */
     private void drawBlocks(Graphics2D g) {
-        Set<Position> done = new HashSet<>();
+        Map<Position, Set<Integer>> blocks = new LinkedHashMap<>();
         for (Piece piece : state.pieces()) {
-            Position p = state.positionOf(piece);
-            if (p == null || !done.add(p) || !InteractionRules.isDoubleBlock(state, p)) continue;
-            Map<PlayerColor, Integer> perColor = new EnumMap<>(PlayerColor.class);
-            for (Piece other : InteractionRules.piecesAt(state, p)) perColor.merge(other.color(), 1, Integer::sum);
-            PlayerColor owner = perColor.entrySet().stream()
-                    .filter(entry -> entry.getValue() >= 2).map(Map.Entry::getKey).findFirst().orElseThrow();
-            Rectangle r = rect(p);
-            g.setColor(Theme.colorOf(owner));
-            g.setStroke(new BasicStroke(3f));
-            g.drawRect(r.x + 2, r.y + 2, r.width - 4, r.height - 4);
+            Position square = state.positionOf(piece);
+            if (square != null && !blocks.containsKey(square)) {
+                blocks.put(square, new TreeSet<>(InteractionRules.blockOwners(state, square)));
+            }
+        }
+        // During travel, preserve the pre-move block display until the pawn arrives.
+        if (motion != null && pendingInteraction != null) {
+            for (PieceInteractionEvent.BlockChange change : pendingInteraction.blockChanges()) {
+                Set<Integer> owners = blocks.computeIfAbsent(change.square(), key -> new TreeSet<>());
+                if (change.formed()) owners.remove(change.ownerIndex());
+                else owners.add(change.ownerIndex());
+            }
+        }
+        for (Map.Entry<Position, Set<Integer>> block : blocks.entrySet()) {
+            int layer = 0;
+            for (Integer owner : block.getValue()) {
+                Rectangle r = rect(block.getKey());
+                g.setColor(Theme.colorOf(state.players().get(owner).color()));
+                g.setStroke(new BasicStroke(2.6f));
+                int inset = 2 + 4 * layer++;
+                g.drawRoundRect(r.x + inset, r.y + inset, r.width - 2 * inset,
+                        r.height - 2 * inset, 8, 8);
+            }
         }
     }
 
+    /** Paint the four finishing triangles. */
     private void drawCenter(Graphics2D g, Board board) {
         Rectangle r = rect(board.centerCorner());
         int d = cell * 3;
@@ -270,11 +320,13 @@ public final class BoardCanvas extends JPanel {
         g.drawRect(x, y, d, d);
     }
 
+    /** Fill one finishing triangle with a player color. */
     private void fillTriangle(Graphics2D g, PlayerColor color, int[] xs, int[] ys) {
         g.setColor(Theme.softColorOf(color));
         g.fillPolygon(xs, ys, 3);
     }
 
+    /** Paint visible pieces, respecting temporary animation sprites. */
     private void drawPieces(Graphics2D g, Board board) {
         drawnPieces.clear();
         Map<Position, List<Piece>> onSquares = new LinkedHashMap<>();
@@ -282,6 +334,8 @@ public final class BoardCanvas extends JPanel {
         for (Piece piece : state.pieces()) {
             // Preserve the destination slot even while the moving piece is drawn separately.
             boolean hideMoving = motion != null && motion.move().pieceId() == piece.id();
+            boolean hideCaptured = capturedPieceStillAnimating(piece.id());
+            if (hideCaptured) continue;
             if (piece.isInCastle()) {
                 Rectangle r = rect(board.castleCorner(piece.color()));
                 int index = piece.number() - 1;
@@ -309,6 +363,68 @@ public final class BoardCanvas extends JPanel {
         if (motion != null) drawMovingPiece(g, board);
     }
 
+    /** Keep a captured pawn at its old square until its return-to-castle animation finishes. */
+    private boolean capturedPieceStillAnimating(int pieceId) {
+        PieceInteractionEvent event = pendingInteraction != null ? pendingInteraction
+                : interactionFx != null ? interactionFx.event() : null;
+        return event != null && event.capture() != null && event.capture().pieceId() == pieceId;
+    }
+
+    /** Paint capture, safe-landings and Double Block feedback without changing Model state. */
+    private void drawInteractionEffects(Graphics2D g, Board board) {
+        PieceInteractionEvent event = interactionFx != null ? interactionFx.event() : pendingInteraction;
+        if (event == null) return;
+        double t = interactionFx == null ? 0.0 : Math.min(1.0,
+                Math.max(0.0, (double) (System.nanoTime() - interactionFx.startedAt()) / INTERACTION_DURATION_NS));
+        int opacity = interactionFx == null ? 180 : (int) Math.round(210 * (1.0 - t));
+        if (event.capture() != null) drawCaptureReturn(g, board, event.capture(), t);
+        if (interactionFx == null) return; // Other effects begin only after the pawn has landed.
+        if (event.protectedLanding() != null) {
+            drawSquareHalo(g, event.protectedLanding(), new Color(14, 165, 233), t, opacity, false);
+        }
+        if (event.blockedBy() != null) {
+            drawSquareHalo(g, event.blockedBy(), new Color(217, 52, 61), t, opacity, true);
+        }
+        for (PieceInteractionEvent.BlockChange change : event.blockChanges()) {
+            PlayerColor color = state.players().get(change.ownerIndex()).color();
+            drawSquareHalo(g, change.square(), Theme.colorOf(color), t, opacity, !change.formed());
+        }
+    }
+
+    /** Animate the captured pawn shrinking and returning from its landing square to its castle. */
+    private void drawCaptureReturn(Graphics2D g, Board board, PieceInteractionEvent.Capture capture, double t) {
+        Piece victim = state.piece(capture.pieceId());
+        Rectangle source = rect(capture.square());
+        Point destination = castleSlot(board, victim);
+        double eased = smoothstep(t);
+        int x = (int) Math.round(source.getCenterX() + (destination.x - source.getCenterX()) * eased);
+        int y = (int) Math.round(source.getCenterY() + (destination.y - source.getCenterY()) * eased
+                - Math.sin(Math.PI * eased) * cell * 0.48);
+        int radius = Math.max(5, (int) Math.round(cell * (0.34 + 0.21 * eased)));
+        drawPiece(g, victim, x, y, radius);
+        if (interactionFx != null) {
+            g.setColor(alpha(new Color(239, 68, 68), (int) (130 * (1 - t))));
+            int spread = (int) (cell * (0.35 + t * 1.25));
+            g.setStroke(new BasicStroke(2.6f));
+            g.drawOval((int) source.getCenterX() - spread, (int) source.getCenterY() - spread,
+                    spread * 2, spread * 2);
+        }
+    }
+
+    /** Pulse the affected square to communicate shielding, blocking or block dissolution. */
+    private void drawSquareHalo(Graphics2D g, Position square, Color tint,
+                                double progress, int opacity, boolean dashed) {
+        Rectangle r = rect(square);
+        int margin = (int) Math.round(cell * (0.02 + progress * 0.16));
+        g.setColor(alpha(tint, opacity));
+        g.setStroke(dashed
+                ? new BasicStroke(3.0f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND,
+                    10f, new float[]{5f, 5f}, (float) (progress * 10f))
+                : new BasicStroke(3.4f));
+        g.drawRoundRect(r.x - margin, r.y - margin, r.width + margin * 2,
+                r.height + margin * 2, 12, 12);
+    }
+
     /** Pieces that finished are drawn inside their colour's triangle in the centre. */
     private Point finishSpot(Board board, PlayerColor color, int k) {
         Rectangle r = rect(board.centerCorner());
@@ -324,6 +440,7 @@ public final class BoardCanvas extends JPanel {
         };
     }
 
+    /** Paint a pawn and, when legal, its pulsing selection highlight. */
     private void drawPiece(Graphics2D g, Piece piece, int x, int y, int radius) {
         drawnPieces.add(new DrawnPiece(piece.id(), x, y, radius));
         if (!isBusy() && state.canMove(piece)) {
@@ -407,6 +524,7 @@ public final class BoardCanvas extends JPanel {
         drawPiece(g, piece, x, y, Math.max(5, radius));
     }
 
+    /** Find the screen coordinate for a pawn at a route step. */
     private Point anchor(Board board, Piece piece, int step) {
         if (step == Piece.IN_CASTLE) return castleSlot(board, piece);
         Position p = board.positionOf(piece.color(), step);
@@ -418,6 +536,7 @@ public final class BoardCanvas extends JPanel {
         throw new IllegalArgumentException("Invalid step " + step);
     }
 
+    /** Find the original castle slot of a pawn. */
     private Point castleSlot(Board board, Piece piece) {
         Rectangle r = rect(board.castleCorner(piece.color()));
         int index = piece.number() - 1;
@@ -425,6 +544,7 @@ public final class BoardCanvas extends JPanel {
                 (int) (r.y + cell * (1.9 + (index / 2) * 2.2)));
     }
 
+    /** Find the display index of a completed pawn. */
     private int finishedIndex(Piece piece) {
         int index = 0;
         for (Piece other : state.pieces()) {
@@ -459,13 +579,16 @@ public final class BoardCanvas extends JPanel {
         }
     }
 
+    /** Smooth progress for movement and interaction transitions. */
     private static double smoothstep(double t) { return t * t * (3.0 - 2.0 * t); }
 
+    /** Return a color with the requested clamped opacity. */
     private static Color alpha(Color color, int opacity) {
         return new Color(color.getRed(), color.getGreen(), color.getBlue(),
                 Math.max(0, Math.min(255, opacity)));
     }
 
+    /** Center a text label inside a piece or cell. */
     private void drawText(Graphics2D g, String text, int cx, int cy, Color color, int size) {
         g.setFont(Theme.font(size, true));
         g.setColor(color);
@@ -499,6 +622,7 @@ public final class BoardCanvas extends JPanel {
         rotated.dispose();
     }
 
+    /** Create the star shape used for protected squares. */
     private static Shape star(double cx, double cy, double outer, double inner) {
         Path2D path = new Path2D.Double();
         for (int i = 0; i < 10; i++) {

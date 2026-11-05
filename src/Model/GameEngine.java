@@ -17,6 +17,7 @@ public final class GameEngine {
     private final GameClock gameClock;
     private final List<GameListener> listeners = new ArrayList<>();
 
+    /** Initialize a game with validated players and deterministic dependencies. */
     public GameEngine(Difficulty difficulty, List<String> names, List<PlayerColor> colors) {
         this(difficulty, names, colors, new Random(), new Dice(), Clock.systemDefaultZone());
     }
@@ -38,13 +39,16 @@ public final class GameEngine {
         state.log("המשחק התחיל. התור של " + state.currentPlayer().name());
     }
 
+    /** Return the current authoritative game state. */
     public GameState state() { return state; }
 
     /** Game time for the clock on the board (FR-48). */
     public long elapsedSeconds() { return gameClock.elapsedSeconds(); }
 
+    /** Register one observer for game state changes. */
     public void addListener(GameListener listener) { listeners.add(Objects.requireNonNull(listener)); }
 
+    /** Unregister a previously added observer. */
     public void removeListener(GameListener listener) { listeners.remove(listener); }
 
     /** FR-15, FR-18, FR-19, FR-20: rolls the die and works out what the player may do. */
@@ -82,10 +86,7 @@ public final class GameEngine {
         notifyChanged();
     }
 
-    /**
-     * FR-23, FR-27: moves the chosen piece if it has a legal move.
-     * Returns false (with a message) for a piece that cannot move now.
-     */
+    /** Reject illegal selections or commit exactly one approved move. */
     public boolean movePiece(int pieceId) {
         if (state.phase() != GameState.Phase.WAITING_FOR_MOVE) {
             state.log(state.phase() == GameState.Phase.GAME_OVER
@@ -104,25 +105,40 @@ public final class GameEngine {
         return true;
     }
 
+    /** Apply one validated move and record its interaction effects for the View. */
     private void apply(Move move) {
         Player player = state.currentPlayer();
         Piece piece = state.piece(move.pieceId());
+        Position from = state.positionOf(piece);
+        Position to = state.board().positionOf(piece.color(), move.toStep());
+        Map<Position, Set<Integer>> before = snapshotBlocks(from, to);
+
         piece.moveTo(move.toStep());
         state.setLegalMoves(List.of());
         state.log(describe(player, piece, move));
 
-        InteractionRules.capturableOpponent(state, piece).ifPresent(victim -> {
+        PieceInteractionEvent.Capture capture = null;
+        Optional<Piece> captured = InteractionRules.capturableOpponent(state, piece);
+        if (captured.isPresent()) {
+            Piece victim = captured.get();
+            capture = new PieceInteractionEvent.Capture(victim.id(), to);
             victim.returnToCastle();
             state.log("אכילה! כלי " + victim.number() + " של "
                     + state.players().get(victim.ownerIndex()).name() + " חזר לטירה.");
-        });
+        }
+        Position protection = InteractionRules.sharesProtectedSquareWithOpponent(state, piece) ? to : null;
+        Position blockedBy = move.partial()
+                ? state.board().positionOf(piece.color(), move.toStep() + 1) : null;
+        PieceInteractionEvent interaction = new PieceInteractionEvent(
+                capture, protection, blockedBy, changesToBlocks(before));
+
         if (state.isFinished(piece)) {
             state.log("כלי " + piece.number() + " של " + player.name() + " הגיע לבית הסיום.");
         }
         if (RankingManager.rankIfCompleted(state, player)) {
             state.log(player.name() + " סיים/ה במקום " + player.rank() + ".");
             if (RankingManager.isGameOver(state)) {
-                endGame(move);
+                endGame(move, interaction);
                 return;
             }
         }
@@ -132,15 +148,45 @@ public final class GameEngine {
         } else {
             passTurn();
         }
-        notifyMoved(move);
+        notifyMoved(move, interaction);
     }
 
-    private void endGame(Move move) {
+    /** Snapshot all Double Block owners at the squares affected by a move. */
+    private Map<Position, Set<Integer>> snapshotBlocks(Position from, Position to) {
+        Map<Position, Set<Integer>> snapshot = new LinkedHashMap<>();
+        if (from != null) snapshot.put(from, InteractionRules.blockOwners(state, from));
+        if (to != null) snapshot.put(to, InteractionRules.blockOwners(state, to));
+        return snapshot;
+    }
+
+    /** Compare block owners before and after movement to emit exact FR-30/FR-32 changes. */
+    private List<PieceInteractionEvent.BlockChange> changesToBlocks(Map<Position, Set<Integer>> before) {
+        List<PieceInteractionEvent.BlockChange> changes = new ArrayList<>();
+        for (Map.Entry<Position, Set<Integer>> entry : before.entrySet()) {
+            Position square = entry.getKey();
+            Set<Integer> oldOwners = entry.getValue();
+            Set<Integer> newOwners = InteractionRules.blockOwners(state, square);
+            for (Integer owner : oldOwners) {
+                if (!newOwners.contains(owner)) {
+                    changes.add(new PieceInteractionEvent.BlockChange(owner, square, false));
+                }
+            }
+            for (Integer owner : newOwners) {
+                if (!oldOwners.contains(owner)) {
+                    changes.add(new PieceInteractionEvent.BlockChange(owner, square, true));
+                }
+            }
+        }
+        return List.copyOf(changes);
+    }
+
+    /** Produce immutable final rankings and announce the finishing move first. */
+    private void endGame(Move move, PieceInteractionEvent interaction) {
         gameClock.stop();
         List<GameResult.Standing> standings = new ArrayList<>();
-        for (Player player : RankingManager.finalStandings(state)) {
-            standings.add(new GameResult.Standing(player.rank(), player.name(), player.color(),
-                    player.completedAllPieces()));
+        for (Player participant : RankingManager.finalStandings(state)) {
+            standings.add(new GameResult.Standing(participant.rank(), participant.name(), participant.color(),
+                    participant.completedAllPieces()));
         }
         GameResult result = new GameResult(state.difficulty(), standings,
                 gameClock.elapsedSeconds(), LocalDateTime.now(clock));
@@ -148,27 +194,33 @@ public final class GameEngine {
         state.setLegalMoves(List.of());
         state.setPhase(GameState.Phase.GAME_OVER);
         state.log("המשחק הסתיים. המנצח/ת: " + result.winner().name());
-        notifyMoved(move);
+        notifyMoved(move, interaction);
         for (GameListener listener : List.copyOf(listeners)) listener.onGameOver(result);
     }
 
+    /** Advance to the next unfinished player. */
     private void passTurn() {
         TurnManager.passTurn(state);
         state.log("התור של " + state.currentPlayer().name());
     }
 
+    /** Build a short human-readable message for a committed move. */
     private String describe(Player player, Piece piece, Move move) {
         if (move.release()) return player.name() + " הוציא/ה את כלי " + piece.number() + " מהטירה.";
         String text = player.name() + " הזיז/ה את כלי " + piece.number() + " " + move.steps() + " צעדים";
         return move.partial() ? text + " ונעצר/ה לפני חסימה." : text + ".";
     }
 
-    /** Notify presentation observers of the committed move before the new state. */
-    private void notifyMoved(Move move) {
+    /** Publish immutable movement and interaction events before refreshing observers. */
+    private void notifyMoved(Move move, PieceInteractionEvent interaction) {
         for (GameListener listener : List.copyOf(listeners)) listener.onPieceMoved(move);
+        if (interaction.hasVisualEffect()) {
+            for (GameListener listener : List.copyOf(listeners)) listener.onPieceInteraction(interaction);
+        }
         notifyChanged();
     }
 
+    /** Notify every registered observer of the current authoritative state. */
     private void notifyChanged() {
         for (GameListener listener : List.copyOf(listeners)) listener.onStateChanged(state);
     }
