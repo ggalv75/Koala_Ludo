@@ -16,18 +16,22 @@ public final class GameController {
     private GameBoardView boardView;
     private GameSetupView setupView;
 
+    /** Show the application main menu. */
     public void start() { showMainMenu(); }
 
+    /** Reset the current session and display the main menu. */
     private void showMainMenu() {
         leaveCurrentGame();
         window.showScreen(new MainMenuView(this::showSetup, this::showRules, this::exitApplication));
     }
 
+    /** Show player and difficulty configuration. */
     private void showSetup() {
         setupView = new GameSetupView(this::startGame, this::showMainMenu);
         window.showScreen(setupView);
     }
 
+    /** Display the Easy-level rule dialog. */
     private void showRules() { Dialogs.rules(window.component()); }
 
     /** FR-05: the game starts only with valid settings; otherwise the setup screen shows why. */
@@ -41,16 +45,20 @@ public final class GameController {
         boardView = new GameBoardView(engine::elapsedSeconds, this::rollDice, this::selectPiece, this::confirmLeaveGame);
         engine.addListener(boardView);
         engine.addListener(new GameListener() {
+            /** Notify the Controller that the game ended. */
             @Override public void onGameOver(GameResult result) { showResults(result); }
         });
         window.showScreen(boardView);
         boardView.onStateChanged(engine.state());
     }
 
+    /** Ask the Model to roll while handling unexpected errors. */
     private void rollDice() { runSafely(() -> engine.rollDice()); }
 
+    /** Pass the chosen pawn to the Model for validation. */
     private void selectPiece(int pieceId) { runSafely(() -> engine.movePiece(pieceId)); }
 
+    /** Ask the player before discarding the current game. */
     private void confirmLeaveGame() {
         if (Dialogs.confirm(window.component(), "יציאה מהמשחק", "המשחק הנוכחי לא יישמר. לחזור למסך הפתיחה?")) {
             showMainMenu();
@@ -67,6 +75,7 @@ public final class GameController {
         }
     }
 
+    /** Stop animation timers and open the final ranking screen. */
     private void showResultsNow(GameResult result) {
         if (boardView != null) boardView.stopClock();
         Dialogs.info(window.component(), "סיום המשחק", "המנצח/ת: " + result.winner().name());
@@ -74,6 +83,7 @@ public final class GameController {
         window.showScreen(new ResultsView(result, this::showMainMenu));
     }
 
+    /** Dispose game views and remove their observers. */
     private void leaveCurrentGame() {
         if (boardView != null) boardView.stopClock();
         if (engine != null && boardView != null) engine.removeListener(boardView);
@@ -81,6 +91,7 @@ public final class GameController {
         boardView = null;
     }
 
+    /** Close the application window and terminate the process. */
     private void exitApplication() {
         window.close();
         System.exit(0);

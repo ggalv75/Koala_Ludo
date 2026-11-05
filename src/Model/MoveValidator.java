@@ -4,12 +4,10 @@ import java.util.*;
 
 /** Finds the legal moves for a roll: FR-23, FR-24, FR-26, FR-27, FR-31 (step count: FR-16, FR-17). */
 public final class MoveValidator {
+    /** Prevent direct instantiation of the validator. */
     private MoveValidator() { }
 
-    /**
-     * Legal moves of the current player. If any piece can use the whole roll, only such moves are
-     * offered; a piece stops before a Double Block only when no piece can use the whole roll (FR-31).
-     */
+    /** Offer full legal moves first, otherwise allowed moves stopping before a block. */
     public static List<Move> legalMoves(GameState state, DiceRoll roll) {
         Board board = state.board();
         Player player = state.currentPlayer();
@@ -33,11 +31,7 @@ public final class MoveValidator {
         return List.copyOf(full.isEmpty() ? partial : full);
     }
 
-    /**
-     * FR-24: a six releases a piece to its start square, even when own pieces or one opponent piece are
-     * there (the start square is protected, so nothing is captured). FR-30: an opponent's Double Block on
-     * the start square keeps the castle closed while it stands.
-     */
+    /** Release a pawn only on six and only when its entry is not blocked. */
     static Optional<Move> releaseMove(GameState state, Piece piece, DiceRoll roll) {
         if (!roll.isSix()) return Optional.empty();
         Position start = state.board().positionOf(piece.color(), 0);
@@ -45,10 +39,7 @@ public final class MoveValidator {
         return Optional.of(new Move(piece.id(), Piece.IN_CASTLE, 0, true, false));
     }
 
-    /**
-     * FR-16 / FR-17: at the Easy level the step count is the regular die value, on the track and on the
-     * home path alike. Special dice (Boost, UltraBoost) are added here in iterations 2-3.
-     */
+    /** Use the ordinary die result for Easy-level movement. */
     static int stepsFor(Piece piece, DiceRoll roll, Board board) {
         return roll.value();
     }

@@ -1,15 +1,16 @@
 package Model;
 
-/**
- * Observer design pattern: views register with the {@link GameEngine} and are told when the
- * game changes, so the Model never depends on the View (MVC, SRS 3.4.2).
- */
+/** Observer events isolate game rules from animations (MVC, SRS 3.4.2). */
 public interface GameListener {
-    /** A legal piece movement was committed. Fired just before onStateChanged.
-     *  Views may use the immutable Move to animate the path; it changes no game rules. */
+    /** Notify listeners about a committed piece movement before the state refresh. */
     default void onPieceMoved(Move move) { }
 
+    /** Notify listeners of capture, protection, block and partial-move outcomes. */
+    default void onPieceInteraction(PieceInteractionEvent event) { }
+
+    /** Notify listeners that the current game state has changed. */
     default void onStateChanged(GameState state) { }
 
+    /** Notify listeners that the game finished and a result is available. */
     default void onGameOver(GameResult result) { }
 }
