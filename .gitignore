@@ -1,0 +1,12 @@
+# Eclipse and build output
+bin/
+bin-test/
+build/
+*.class
+.metadata/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Keep .settings/org.eclipse.core.resources.prefs: it makes Eclipse read the Hebrew text as UTF-8.
