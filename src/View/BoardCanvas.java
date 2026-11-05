@@ -248,45 +248,45 @@ public final class BoardCanvas extends JPanel {
     }
 
 
-/** Paint one board cell according to its semantic type. */
-private void drawCell(Graphics2D g, Position position, Cell c) {
-    Rectangle r = rect(position);
+	/** Paint one board cell according to its semantic type. */
+	private void drawCell(Graphics2D g, Position position, Cell c) {
+		Rectangle r = rect(position);
 
-    Color fill = switch (c.type()) {
-        case START, ARROW -> Theme.softColorOf(c.color());
-        case HOME -> Theme.homePathColorOf(c.color());
-        case SAFE -> Theme.SAFE_SOFT;
-        case REGULAR -> Theme.SURFACE;
-    };
+		Color fill = switch (c.type()) {
+		case START, ARROW -> Theme.softColorOf(c.color());
+		case HOME -> Theme.homePathColorOf(c.color());
+		case SAFE -> Theme.SAFE_SOFT;
+		case REGULAR -> Theme.SURFACE;
+		};
 
-    g.setColor(fill);
-    g.fillRect(r.x, r.y, r.width, r.height);
+		g.setColor(fill);
+		g.fillRect(r.x, r.y, r.width, r.height);
 
-    // Emphasize home paths without changing game logic.
-    if (c.type() == CellType.HOME) {
-        g.setColor(Theme.colorOf(c.color()));
-        g.setStroke(new BasicStroke(2f));
-    } else {
-        g.setColor(Theme.BORDER);
-        g.setStroke(new BasicStroke(1f));
-    }
+		// Emphasize home paths without changing game logic.
+		if (c.type() == CellType.HOME) {
+			g.setColor(Theme.colorOf(c.color()));
+			g.setStroke(new BasicStroke(2f));
+		} else {
+			g.setColor(Theme.BORDER);
+			g.setStroke(new BasicStroke(1f));
+		}
 
-    g.drawRect(r.x, r.y, r.width - 1, r.height - 1);
+		g.drawRect(r.x, r.y, r.width - 1, r.height - 1);
 
-    int cx = r.x + r.width / 2;
-    int cy = r.y + r.height / 2;
+		int cx = r.x + r.width / 2;
+		int cy = r.y + r.height / 2;
 
-    switch (c.type()) {
-        case START -> drawText(g, "#", cx, cy,
-                Theme.colorOf(c.color()), (int) (cell * 0.6));
-        case SAFE -> {
-            g.setColor(Theme.SAFE);
-            g.fill(star(cx, cy, cell * 0.38, cell * 0.16));
-        }
-        case ARROW -> drawArrow(g, c.color(), cx, cy);
-        default -> { }
-    }
-}
+		switch (c.type()) {
+		case START -> drawText(g, "#", cx, cy, Theme.colorOf(c.color()), (int) (cell * 0.6));
+		case SAFE -> {
+			g.setColor(Theme.SAFE);
+			g.fill(star(cx, cy, cell * 0.38, cell * 0.16));
+		}
+		case ARROW -> drawArrow(g, c.color(), cx, cy);
+		default -> {
+		}
+		}
+	}
 
     /** Draw every active Double Block, including simultaneous owners on protected squares. */
     private void drawBlocks(Graphics2D g) {
@@ -336,11 +336,11 @@ private void drawCell(Graphics2D g, Position position, Cell c) {
     }
 
 
-    /** Fill one finishing triangle with a visible player color. */
-    private void fillTriangle(Graphics2D g, PlayerColor color, int[] xs, int[] ys) {
-    g.setColor(Theme.homePathColorOf(color));
-    g.fillPolygon(xs, ys, 3);
-}
+	/** Fill one finishing triangle with a visible player color. */
+	private void fillTriangle(Graphics2D g, PlayerColor color, int[] xs, int[] ys) {
+		g.setColor(Theme.homePathColorOf(color));
+		g.fillPolygon(xs, ys, 3);
+	}
 
     /** Paint visible pieces, respecting temporary animation sprites. */
     private void drawPieces(Graphics2D g, Board board) {
