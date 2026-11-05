@@ -25,6 +25,8 @@ public final class GameBoardView extends JPanel implements GameListener {
     private final JTextArea log = new JTextArea();
     private final LongSupplier elapsedSeconds;
     private final Timer clockTimer;
+    private GameState displayedState;
+    private Move pendingMove;
 
     public GameBoardView(LongSupplier elapsedSeconds, Runnable onRoll, IntConsumer onPieceClick, Runnable onExit) {
         this.elapsedSeconds = elapsedSeconds;
@@ -60,6 +62,14 @@ public final class GameBoardView extends JPanel implements GameListener {
         info.add(clock);
         info.add(level);
         info.add(turn);
+        JCheckBox animations = new JCheckBox("אנימציות תנועה", true);
+        animations.setOpaque(false);
+        animations.setFont(Theme.font(13, false));
+        animations.addActionListener(e -> {
+            canvas.setAnimationsEnabled(animations.isSelected());
+            updateRollButton();
+        });
+        info.add(animations);
         side.add(fullWidth(info, 130));
         side.add(Box.createVerticalStrut(10));
 
@@ -111,8 +121,16 @@ public final class GameBoardView extends JPanel implements GameListener {
     }
 
     @Override
+    public void onPieceMoved(Move move) {
+        pendingMove = move; // next onStateChanged contains the committed game state
+    }
+
+    @Override
     public void onStateChanged(GameState state) {
-        canvas.setState(state);
+        displayedState = state;
+        canvas.setState(state, pendingMove);
+        pendingMove = null;
+        if (canvas.isBusy()) canvas.whenEffectsFinish(this::updateRollButton);
         clock.setText(GameClock.format(elapsedSeconds.getAsLong()));
         level.setText("רמת קושי: " + state.difficulty().displayName());
         Player current = state.currentPlayer();
@@ -121,7 +139,7 @@ public final class GameBoardView extends JPanel implements GameListener {
         DiceRoll roll = state.lastRoll();
         die.setValue(roll == null ? 0 : roll.value());
         rollInfo.setText(roll == null ? "ממתין להטלה" : "תוצאת ההטלה: " + roll.value());
-        rollButton.setEnabled(state.phase() == GameState.Phase.WAITING_FOR_ROLL);
+        updateRollButton();
         status.setText("<html>" + Dialogs.escape(state.lastMessage()) + "</html>");
         updatePlayers(state);
         log.setText(String.join("\n", state.recentLog()));
@@ -144,6 +162,20 @@ public final class GameBoardView extends JPanel implements GameListener {
         playersList.repaint();
     }
 
+    private void updateRollButton() {
+        rollButton.setEnabled(displayedState != null
+                && displayedState.phase() == GameState.Phase.WAITING_FOR_ROLL
+                && !canvas.isBusy());
+    }
+
+    /** After the last animated piece finishes, the Controller can show the results. */
+    public void whenVisualEffectsFinish(Runnable continuation) {
+        canvas.whenEffectsFinish(continuation);
+    }
+
     /** Called by the Controller when the game ends or the player leaves the screen. */
-    public void stopClock() { clockTimer.stop(); }
+    public void stopClock() {
+        clockTimer.stop();
+        canvas.stopEffects();
+    }
 }
