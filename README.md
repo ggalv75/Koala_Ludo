@@ -9,13 +9,12 @@
 - macOS/Linux: `java -jar LudoKoala.jar` או `./run.sh`.
 - המשחק לא משתמש בקבצים חיצוניים או בנתיבים מקומיים, ולכן רץ מכל תיקייה (NFR-07).
 
-בנייה מחדש של ה-JAR: `build.bat` ב-Windows או `./build.sh`. הבדיקות לא נארזות ב-JAR.
+בנייה מחדש של ה-JAR: `build.bat` ב-Windows או `./build.sh`.
 
 ## Eclipse
 
 1. File → Import → General → Existing Projects into Workspace, ולבחור את התיקייה.
 2. להריץ את `Controller.LudoApplication` כ-Java Application.
-3. בדיקות: קליק ימני על התיקייה `test` → Run As → JUnit Test (‏JUnit 5 מובנה ב-Eclipse).
 
 הקובץ `.settings/org.eclipse.core.resources.prefs` מגדיר קידוד UTF-8. לא למחוק אותו ולא להכניס אותו ל-`.gitignore`, אחרת הטקסט בעברית ייראה משובש ב-Eclipse על Windows.
 
@@ -50,18 +49,14 @@
 
 החלוקה מאפשרת לכל אחד להכניס ל-GitHub את החלק שלו ב-Pull Request נפרד (SDP 5.3.4, תנאי 2).
 
-| חבר צוות | קבצים | דרישות | בדיקות |
-|---|---|---|---|
-| דור | `Controller/*`, `View/*`, `build.*`, `run.*`, קבצי Eclipse | 3.4.1–3.4.2, FR-01–05, FR-15, FR-23, FR-48–49 (צד התצוגה) | – |
-| עומר | `Difficulty`, `GameRules`, `SetupValidator`, `Player`, `PlayerColor`, `Piece`, `Position`, `Cell`, `CellType`, `Board`, `BoardFactory`, `InteractionRules` | FR-01–11, FR-14, FR-28–30, FR-32 | `SetupValidatorTest`, `BoardFactoryTest`, `InteractionRulesTest` |
-| גל | `Dice`, `DiceRoll`, `TurnManager`, `RankingManager`, `GameClock`, `GameResult`, `GameListener`, `GameEngine` (זרימת התור) | FR-15–20, FR-45–48 | `DiceTest`, `TurnFlowTest`, `RankingTest`, `GameSimulationTest` |
-| דיאנה | `MoveValidator`, `Move`, `GameState`, `GameEngine` (ביצוע מהלך ואכילה) | FR-23–27, FR-31 | `MoveValidatorTest` |
+| חבר צוות | קבצים | דרישות |
+|---|---|---|
+| דור | `Controller/*`, `View/*`, `build.*`, `run.*`, קבצי Eclipse | 3.4.1–3.4.2, FR-01–05, FR-15, FR-23, FR-48–49 (צד התצוגה) |
+| עומר | `Difficulty`, `GameRules`, `SetupValidator`, `Player`, `PlayerColor`, `Piece`, `Position`, `Cell`, `CellType`, `Board`, `BoardFactory`, `InteractionRules` | FR-01–11, FR-14, FR-28–30, FR-32 |
+| גל | `Dice`, `DiceRoll`, `TurnManager`, `RankingManager`, `GameClock`, `GameResult`, `GameListener`, `GameEngine` (זרימת התור) | FR-15–20, FR-45–48 |
+| דיאנה | `MoveValidator`, `Move`, `GameState`, `GameEngine` (ביצוע מהלך ואכילה) | FR-23–27, FR-31 |
 
 סדר מיזוג מומלץ, לפי התלויות: עומר (מבנה ולוח) ← גל ודיאנה (חוקים) ← דור (תצוגה ובקר).
-
-## בדיקות
-
-53 בדיקות JUnit 5 בתיקייה `test/Model`, כולן עוברות. הן כוללות ערכי גבול (1/5 שחקנים, שם באורך 15/16, קובייה 0/7), טבלאות החלטה לתנועה מול חסימות, ומעברי מצב בתורות (6, שלוש שישיות, סיום שחקן). `GameSimulationTest` מריץ 15 משחקים אקראיים מלאים (2, 3 ו-4 שחקנים) ובודק אחרי כל פעולה שהלוח תקין.
 
 ## החלטות שכדאי לתעד בדוח המערכת
 
