@@ -3,6 +3,7 @@ bin/
 bin-test/
 build/
 *.class
+*.jar
 .metadata/
 
 # OS files

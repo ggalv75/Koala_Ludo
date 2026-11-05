@@ -5,6 +5,7 @@
 ## הרצה
 
 - נדרשת Java 17 ומעלה.
+- ה-JAR לא נשמר בגיט. בונים אותו קודם עם `build.bat` (או `./build.sh`).
 - Windows: לחיצה כפולה על `LudoKoala.jar`, או `run.bat` (מציג שגיאה אם Java חסרה).
 - macOS/Linux: `java -jar LudoKoala.jar` או `./run.sh`.
 - המשחק לא משתמש בקבצים חיצוניים או בנתיבים מקומיים, ולכן רץ מכל תיקייה (NFR-07).
