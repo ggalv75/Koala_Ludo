@@ -11,18 +11,22 @@ public final class GameClock {
     private final Instant start;
     private Instant end;
 
+    /** Start timing the game using the supplied clock. */
     public GameClock(Clock clock) {
         this.clock = Objects.requireNonNull(clock);
         this.start = clock.instant();
     }
 
+    /** Return elapsed game seconds, frozen after the game ends. */
     public long elapsedSeconds() {
         Instant until = end != null ? end : clock.instant();
         return Duration.between(start, until).getSeconds();
     }
 
+    /** Report whether the game timer has stopped. */
     public boolean isStopped() { return end != null; }
 
+    /** Freeze the elapsed duration when the game ends. */
     void stop() {
         if (end == null) end = clock.instant();
     }

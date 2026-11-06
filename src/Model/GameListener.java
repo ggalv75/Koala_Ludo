@@ -8,6 +8,9 @@ public interface GameListener {
     /** Notify listeners of capture, protection, block and partial-move outcomes. */
     default void onPieceInteraction(PieceInteractionEvent event) { }
 
+    /** Announce a player who finished all four pieces and received a final place. */
+    default void onPlayerFinished(PlayerFinishEvent event) { }
+
     /** Notify listeners that the current game state has changed. */
     default void onStateChanged(GameState state) { }
 

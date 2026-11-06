@@ -14,6 +14,7 @@ public final class Board {
     private final Map<PlayerColor, Position> castleCorners;
     private final Position centerCorner;
 
+    /** Build an immutable board, routes, castles and center from its configuration. */
     Board(Difficulty difficulty, Map<Position, Cell> cells, Map<PlayerColor, List<Position>> routes,
           Map<PlayerColor, Position> castleCorners, Position centerCorner) {
         this.difficulty = difficulty;
@@ -25,10 +26,15 @@ public final class Board {
         this.centerCorner = centerCorner;
     }
 
+    /** Return the difficulty configuration used to build the board. */
     public Difficulty difficulty() { return difficulty; }
+    /** Return the number of rows and columns on this board. */
     public int size() { return difficulty.boardSize(); }
+    /** Expose the immutable map of physical board squares. */
     public Map<Position, Cell> cells() { return cells; }
+    /** Look up a square by its position or route step. */
     public Cell cellAt(Position position) { return cells.get(position); }
+    /** Return the immutable movement route for one player color. */
     public List<Position> route(PlayerColor color) { return routes.get(color); }
 
     /** Number of squares a piece passes on its route (shared track part plus home path). */
@@ -46,6 +52,7 @@ public final class Board {
         return step >= 0 && step < route.size() ? route.get(step) : null;
     }
 
+    /** Look up a square by its position or route step. */
     public Cell cellAt(PlayerColor color, int step) {
         Position position = positionOf(color, step);
         return position == null ? null : cells.get(position);
@@ -57,6 +64,7 @@ public final class Board {
     /** Top-left square of the 3x3 finish area. */
     public Position centerCorner() { return centerCorner; }
 
+    /** Count board squares of the requested type. */
     public long count(CellType type) {
         return cells.values().stream().filter(cell -> cell.type() == type).count();
     }

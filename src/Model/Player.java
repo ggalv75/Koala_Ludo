@@ -10,6 +10,7 @@ public final class Player {
     private int rank;
     private boolean completedAllPieces;
 
+    /** Create a player with a stable index, name and unique color. */
     Player(int index, String name, PlayerColor color) {
         this.index = index;
         this.name = Objects.requireNonNull(name);
@@ -18,14 +19,18 @@ public final class Player {
 
     /** Position of the player in the turn order (0-based). */
     public int index() { return index; }
+    /** Return this player’s display name. */
     public String name() { return name; }
+    /** Return the unique color assigned to this player. */
     public PlayerColor color() { return color; }
     /** Final place, or 0 while the player is still playing. */
     public int rank() { return rank; }
+    /** Check whether this player has already received a rank. */
     public boolean isFinished() { return rank > 0; }
     /** False only for the player left last without bringing all pieces home (FR-47). */
     public boolean completedAllPieces() { return completedAllPieces; }
 
+    /** Assign the finishing rank and completion status. */
     void assignRank(int rank, boolean completedAllPieces) {
         this.rank = rank;
         this.completedAllPieces = completedAllPieces;
