@@ -43,7 +43,7 @@ public final class GameState {
     public Player currentPlayer() { return players.get(currentPlayerIndex); }
     public int currentPlayerIndex() { return currentPlayerIndex; }
     public int consecutiveSixes() { return consecutiveSixes; }
-    /** The roll of the current turn, or null before the player rolls. */
+    /** The most recent roll, kept after the turn passes so the die stays visible; null before the first roll. */
     public DiceRoll lastRoll() { return lastRoll; }
     public Phase phase() { return phase; }
     public List<Move> legalMoves() { return legalMoves; }

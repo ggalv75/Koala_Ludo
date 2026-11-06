@@ -1,7 +1,6 @@
 package Model;
 
 import java.time.Clock;
-import java.time.LocalDateTime;
 import java.util.*;
 
 /**
@@ -13,7 +12,6 @@ import java.util.*;
 public final class GameEngine {
     private final GameState state;
     private final Dice dice;
-    private final Clock clock;
     private final GameClock gameClock;
     private final List<GameListener> listeners = new ArrayList<>();
 
@@ -34,7 +32,6 @@ public final class GameEngine {
         }
         this.state = new GameState(BoardFactory.create(difficulty, boardRandom), players);
         this.dice = Objects.requireNonNull(dice);
-        this.clock = Objects.requireNonNull(clock);
         this.gameClock = new GameClock(clock);
         state.log("המשחק התחיל. התור של " + state.currentPlayer().name());
     }
@@ -54,35 +51,36 @@ public final class GameEngine {
     /** FR-15, FR-18, FR-19, FR-20: rolls the die and works out what the player may do. */
     public void rollDice() {
         if (state.phase() != GameState.Phase.WAITING_FOR_ROLL) {
-            state.log(state.phase() == GameState.Phase.GAME_OVER
-                    ? "המשחק הסתיים."
-                    : "יש לבחור כלי להזזה לפני הטלה נוספת.");
-            notifyChanged();
+            rejectAction("יש לבחור כלי להזזה לפני הטלה נוספת.");
             return;
         }
-        Player player = state.currentPlayer();
         DiceRoll roll = dice.roll();
         state.setLastRoll(roll);
-        state.log(player.name() + " הטיל/ה " + roll.value());
-
-        if (TurnManager.registerRoll(state, roll)) {
-            state.log("שלוש הטלות 6 ברצף: ההטלה השלישית מבוטלת והתור עובר.");
-            passTurn();
-            notifyChanged();
-            return;
-        }
+        state.log(state.currentPlayer().name() + " הטיל/ה " + roll.value());
 
         List<Move> moves = MoveValidator.legalMoves(state, roll);
-        if (!moves.isEmpty()) {
-            state.setLegalMoves(moves);
-            state.setPhase(GameState.Phase.WAITING_FOR_MOVE);
-            state.log("בחרו כלי מסומן להזזה.");
-        } else if (roll.isSix()) {
-            state.log("אין מהלך חוקי, אבל 6 מזכה בהטלה נוספת.");
-        } else {
-            state.log("אין מהלך חוקי. התור עובר.");
-            passTurn();
+        switch (TurnManager.afterRoll(state, roll, !moves.isEmpty())) {
+            case CHOOSE_PIECE -> {
+                state.setLegalMoves(moves);
+                state.setPhase(GameState.Phase.WAITING_FOR_MOVE);
+                state.log("בחרו כלי מסומן להזזה.");
+            }
+            case ROLL_AGAIN -> state.log("אין מהלך חוקי, אבל 6 מזכה בהטלה נוספת.");
+            case PASS_TURN -> {
+                state.log("אין מהלך חוקי. התור עובר.");
+                passTurn();
+            }
+            case THIRD_SIX_CANCELLED -> {
+                state.log("שלוש הטלות 6 ברצף: ההטלה השלישית מבוטלת והתור עובר.");
+                passTurn();
+            }
         }
+        notifyChanged();
+    }
+
+    /** NFR-01: an action that is not allowed now only shows a message to the player. */
+    private void rejectAction(String hint) {
+        state.log(state.phase() == GameState.Phase.GAME_OVER ? "המשחק הסתיים." : hint);
         notifyChanged();
     }
 
@@ -135,20 +133,32 @@ public final class GameEngine {
         if (state.isFinished(piece)) {
             state.log("כלי " + piece.number() + " של " + player.name() + " הגיע לבית הסיום.");
         }
-        if (RankingManager.rankIfCompleted(state, player)) {
+        boolean gameOver = endTurnAfterMove(player);
+        notifyMoved(move, interaction);
+        if (gameOver) {
+            for (GameListener listener : List.copyOf(listeners)) listener.onGameOver(state.result());
+        }
+    }
+
+    /**
+     * FR-45 to FR-47 and FR-19: ranks the player if all pieces are home, then ends the game,
+     * gives another roll after a six, or passes the turn. Returns true if the game ended.
+     */
+    private boolean endTurnAfterMove(Player player) {
+        if (RankingManager.rankIfAllPiecesHome(state, player)) {
             state.log(player.name() + " סיים/ה במקום " + player.rank() + ".");
             if (RankingManager.isGameOver(state)) {
-                endGame(move, interaction);
-                return;
+                endGame();
+                return true;
             }
         }
-        if (TurnManager.grantsExtraRoll(state)) {
+        if (TurnManager.rollsAgain(player, state.lastRoll())) {
             state.setPhase(GameState.Phase.WAITING_FOR_ROLL);
             state.log("בזכות ה-6, " + player.name() + " מטיל/ה שוב.");
         } else {
             passTurn();
         }
-        notifyMoved(move, interaction);
+        return false;
     }
 
     /** Snapshot all Double Block owners at the squares affected by a move. */
@@ -180,22 +190,16 @@ public final class GameEngine {
         return List.copyOf(changes);
     }
 
-    /** Produce immutable final rankings and announce the finishing move first. */
-    private void endGame(Move move, PieceInteractionEvent interaction) {
+    /** FR-47, FR-48: stops the clock, ranks the last player and locks the game. */
+    private void endGame() {
         gameClock.stop();
-        List<GameResult.Standing> standings = new ArrayList<>();
-        for (Player participant : RankingManager.finalStandings(state)) {
-            standings.add(new GameResult.Standing(participant.rank(), participant.name(), participant.color(),
-                    participant.completedAllPieces()));
-        }
-        GameResult result = new GameResult(state.difficulty(), standings,
-                gameClock.elapsedSeconds(), LocalDateTime.now(clock));
+        RankingManager.rankRemainingPlayers(state);
+        GameResult result = new GameResult(state.difficulty(), RankingManager.standings(state),
+                gameClock.elapsedSeconds(), gameClock.endedAt());
         state.setResult(result);
         state.setLegalMoves(List.of());
         state.setPhase(GameState.Phase.GAME_OVER);
         state.log("המשחק הסתיים. המנצח/ת: " + result.winner().name());
-        notifyMoved(move, interaction);
-        for (GameListener listener : List.copyOf(listeners)) listener.onGameOver(result);
     }
 
     /** Advance to the next unfinished player. */

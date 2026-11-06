@@ -151,13 +151,20 @@ public final class GameBoardView extends JPanel implements GameListener {
         turn.setIcon(Theme.colorDot(current.color(), 16));
         DiceRoll roll = state.lastRoll();
         die.setValue(roll == null ? 0 : roll.value());
-        rollInfo.setText(roll == null ? "ממתין להטלה" : "תוצאת ההטלה: " + roll.value());
+        rollInfo.setText(rollText(state, roll));
         updateRollButton();
         status.setText("<html>" + Dialogs.escape(state.lastMessage()) + "</html>");
         updatePlayers(state);
         log.setText(String.join("\n", state.recentLog()));
         log.setCaretPosition(0);
         log.applyComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
+    }
+
+    /** The die keeps its last value between turns, so the label says whether it is the current roll. */
+    private static String rollText(GameState state, DiceRoll roll) {
+        if (roll == null) return "ממתין להטלה";
+        if (state.phase() == GameState.Phase.WAITING_FOR_MOVE) return "תוצאת ההטלה: " + roll.value();
+        return "הטלה אחרונה: " + roll.value();
     }
 
     /** Refresh player progress and ranking labels. */
