@@ -4,6 +4,7 @@ import java.util.List;
 
 /** Turn order and the rule of six: FR-18, FR-19, FR-20 and FR-46. */
 public final class TurnManager {
+    /** Prevent instantiation of the turn rules helper. */
     private TurnManager() { }
 
     /** Counts consecutive sixes; returns true for the third six in a row, which is cancelled (FR-20). */

@@ -20,8 +20,10 @@ public final class Theme {
 
     private static final String FONT_FAMILY = Font.DIALOG;
 
+    /** Prevent instantiation of the shared Swing theme. */
     private Theme() { }
 
+    /** Build a theme-consistent dialog font at the requested size. */
     public static Font font(int size, boolean bold) {
         return new Font(FONT_FAMILY, bold ? Font.BOLD : Font.PLAIN, size);
     }
@@ -36,6 +38,7 @@ public final class Theme {
         };
     }
 
+    /** Return a lighter background shade for the player color. */
     public static Color softColorOf(PlayerColor color) {
         return switch (color) {
             case RED -> new Color(253, 232, 230);
@@ -45,20 +48,7 @@ public final class Theme {
         };
     }
 
-	/**
-	 * Stronger colours for home-path squares. Keeps home paths visually distinct
-	 * from regular cells.
-	 */
-	public static Color homePathColorOf(PlayerColor color) {
-		return switch (color) {
-		case RED -> new Color(248, 159, 154);
-		case GREEN -> new Color(153, 213, 157);
-		case YELLOW -> new Color(255, 221, 119);
-		case BLUE -> new Color(151, 203, 248);
-		};
-	}
-
-
+    /** Create a theme-consistent text label. */
     public static JLabel label(String text, int size, boolean bold) {
         JLabel label = new JLabel(text);
         label.setFont(font(size, bold));
@@ -66,6 +56,7 @@ public final class Theme {
         return label;
     }
 
+    /** Create a styled primary or secondary action button. */
     public static JButton button(String text, boolean primary) {
         JButton button = new JButton(text);
         button.setFont(font(15, true));
@@ -98,6 +89,7 @@ public final class Theme {
         return panel;
     }
 
+    /** Create a theme-consistent player name field. */
     public static JTextField textField() {
         JTextField field = new JTextField();
         field.setFont(font(15, false));
@@ -109,6 +101,7 @@ public final class Theme {
     /** Small filled circle used next to player names. */
     public static Icon colorDot(PlayerColor color, int diameter) {
         return new Icon() {
+            /** Draw a filled circular marker in the player color. */
             @Override public void paintIcon(Component c, Graphics g, int x, int y) {
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
@@ -116,7 +109,9 @@ public final class Theme {
                 g2.fillOval(x, y, diameter, diameter);
                 g2.dispose();
             }
+            /** Return the marker icon width. */
             @Override public int getIconWidth() { return diameter; }
+            /** Return the marker icon height. */
             @Override public int getIconHeight() { return diameter; }
         };
     }

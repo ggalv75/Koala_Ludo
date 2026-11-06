@@ -35,39 +35,53 @@ public final class GameState {
         this.pieces = List.copyOf(created);
     }
 
+    /** Return the board used by the current game. */
     public Board board() { return board; }
     /** FR-06: the level is fixed for the whole game (there is no setter). */
     public Difficulty difficulty() { return board.difficulty(); }
+    /** Return the immutable list of participating players. */
     public List<Player> players() { return players; }
+    /** Return every piece in the current game. */
     public List<Piece> pieces() { return pieces; }
+    /** Return the player whose turn is active. */
     public Player currentPlayer() { return players.get(currentPlayerIndex); }
+    /** Return the index of the active player. */
     public int currentPlayerIndex() { return currentPlayerIndex; }
+    /** Return the current streak of successive sixes. */
     public int consecutiveSixes() { return consecutiveSixes; }
     /** The roll of the current turn, or null before the player rolls. */
     public DiceRoll lastRoll() { return lastRoll; }
+    /** Return the current phase of the game turn. */
     public Phase phase() { return phase; }
+    /** Return the immutable set of currently available moves. */
     public List<Move> legalMoves() { return legalMoves; }
+    /** Return the finished game result when available. */
     public GameResult result() { return result; }
 
+    /** Return one piece by its stable identifier. */
     public Piece piece(int id) { return pieces.get(id); }
 
+    /** Return all pieces belonging to the requested player. */
     public List<Piece> piecesOf(Player player) {
         List<Piece> own = new ArrayList<>();
         for (Piece piece : pieces) if (piece.ownerIndex() == player.index()) own.add(piece);
         return own;
     }
 
+    /** Check whether a piece has reached the final finish position. */
     public boolean isFinished(Piece piece) { return piece.step() >= board.finishStep(); }
 
     /** The square the piece stands on, or null when it is in the castle or the finish area. */
     public Position positionOf(Piece piece) { return board.positionOf(piece.color(), piece.step()); }
 
+    /** Count a player’s pieces already inside the finish. */
     public int finishedPieceCount(Player player) {
         int count = 0;
         for (Piece piece : piecesOf(player)) if (isFinished(piece)) count++;
         return count;
     }
 
+    /** Check whether a piece has a legal move in this phase. */
     public boolean canMove(Piece piece) {
         return legalMoves.stream().anyMatch(move -> move.pieceId() == piece.id());
     }
@@ -78,13 +92,20 @@ public final class GameState {
     /** Most recent messages first. */
     public List<String> recentLog() { return List.copyOf(log); }
 
+    /** Update the active player as part of turn management. */
     void setCurrentPlayerIndex(int index) { this.currentPlayerIndex = index; }
+    /** Update the current six-roll streak. */
     void setConsecutiveSixes(int count) { this.consecutiveSixes = count; }
+    /** Record the most recent accepted die result. */
     void setLastRoll(DiceRoll roll) { this.lastRoll = roll; }
+    /** Change the active phase of the game. */
     void setPhase(Phase phase) { this.phase = phase; }
+    /** Store an immutable copy of the current legal moves. */
     void setLegalMoves(List<Move> moves) { this.legalMoves = List.copyOf(moves); }
+    /** Store the final outcome after the game ends. */
     void setResult(GameResult result) { this.result = result; }
 
+    /** Append a recent message while enforcing the history limit. */
     void log(String message) {
         log.addFirst(message);
         while (log.size() > LOG_SIZE) log.removeLast();

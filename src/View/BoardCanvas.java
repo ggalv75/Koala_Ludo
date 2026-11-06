@@ -23,6 +23,7 @@ public final class BoardCanvas extends JPanel {
     private static final long RELEASE_DURATION_NS = 400_000_000L;
     private static final long CELEBRATION_DURATION_NS = 620_000_000L;
     private static final long INTERACTION_DURATION_NS = 540_000_000L;
+    private static final long PLAYER_FINISH_DURATION_NS = 2_200_000_000L;
 
     private GameState state;
     private final IntConsumer onPieceClick;
@@ -35,6 +36,8 @@ public final class BoardCanvas extends JPanel {
     private Celebration celebration;
     private PieceInteractionEvent pendingInteraction;
     private InteractionFx interactionFx;
+    private PlayerFinishEvent pendingPlayerFinish;
+    private PlayerFinishFx playerFinishFx;
     private int originX;
     private int originY;
     private int cell;
@@ -43,6 +46,7 @@ public final class BoardCanvas extends JPanel {
     private record Motion(Move move, PlayerColor color, long startedAt, long duration) { }
     private record Celebration(int pieceId, PlayerColor color, long startedAt) { }
     private record InteractionFx(PieceInteractionEvent event, long startedAt) { }
+    private record PlayerFinishFx(PlayerFinishEvent event, long startedAt) { }
 
     /** Register mouse listeners and initialize the animation timer. */
     public BoardCanvas(IntConsumer onPieceClick) {
@@ -63,8 +67,9 @@ public final class BoardCanvas extends JPanel {
         });
     }
 
-    /** Render an authoritative state and optionally animate its committed move and interaction. */
-    public void setState(GameState state, Move committedMove, PieceInteractionEvent interaction) {
+    /** Render a new state and queue its movement, interaction and earned-rank effects. */
+    public void setState(GameState state, Move committedMove, PieceInteractionEvent interaction,
+                         PlayerFinishEvent finishedPlayer) {
         this.state = Objects.requireNonNull(state);
         updateHover(-1);
         if (committedMove != null && animationsEnabled) {
@@ -75,9 +80,17 @@ public final class BoardCanvas extends JPanel {
             pendingInteraction = interaction != null && interaction.hasVisualEffect() ? interaction : null;
             interactionFx = null;
             celebration = null;
+            playerFinishFx = null;
         }
+        if (animationsEnabled && finishedPlayer != null) pendingPlayerFinish = finishedPlayer;
+        startPlayerFinishIfReady(System.nanoTime());
         updateTimer();
         repaint();
+    }
+
+    /** Keep the previous API for animation callers that do not announce a finished player. */
+    public void setState(GameState state, Move committedMove, PieceInteractionEvent interaction) {
+        setState(state, committedMove, interaction, null);
     }
 
     /** Preserve the previous movement-only API for existing tests and callers. */
@@ -96,6 +109,8 @@ public final class BoardCanvas extends JPanel {
             celebration = null;
             pendingInteraction = null;
             interactionFx = null;
+            pendingPlayerFinish = null;
+            playerFinishFx = null;
             if (hadEffects) completeVisualEffects();
         }
         updateTimer();
@@ -103,7 +118,10 @@ public final class BoardCanvas extends JPanel {
     }
 
     /** Prevent user input until all sequential visual effects finish. */
-    public boolean isBusy() { return motion != null || celebration != null || interactionFx != null; }
+    public boolean isBusy() {
+        return motion != null || celebration != null || interactionFx != null
+                || pendingPlayerFinish != null || playerFinishFx != null;
+    }
 
     /** Used by Controller to keep the final-piece animation visible before ResultsView. */
     public void whenEffectsFinish(Runnable continuation) {
@@ -119,6 +137,8 @@ public final class BoardCanvas extends JPanel {
         celebration = null;
         pendingInteraction = null;
         interactionFx = null;
+        pendingPlayerFinish = null;
+        playerFinishFx = null;
         onEffectsFinished.clear();
         updateHover(-1);
     }
@@ -151,9 +171,22 @@ public final class BoardCanvas extends JPanel {
         if (interactionFx != null && now - interactionFx.startedAt() >= INTERACTION_DURATION_NS) {
             interactionFx = null;
         }
+        startPlayerFinishIfReady(now);
+        if (playerFinishFx != null && now - playerFinishFx.startedAt() >= PLAYER_FINISH_DURATION_NS) {
+            playerFinishFx = null;
+        }
         updateTimer();
         repaint();
         if (wasBusy && !isBusy()) completeVisualEffects();
+    }
+
+    /** Start the player-wide celebration only after the last pawn's effects finish. */
+    private void startPlayerFinishIfReady(long now) {
+        if (animationsEnabled && pendingPlayerFinish != null && motion == null
+                && celebration == null && interactionFx == null && playerFinishFx == null) {
+            playerFinishFx = new PlayerFinishFx(pendingPlayerFinish, now);
+            pendingPlayerFinish = null;
+        }
     }
 
     /** Run the render timer only while a visible effect is needed. */
@@ -206,8 +239,8 @@ public final class BoardCanvas extends JPanel {
         repaint();
     }
 
-    @Override
     /** Draw the board, previews, pieces and non-authoritative visual effects. */
+    @Override
     protected void paintComponent(Graphics graphics) {
         super.paintComponent(graphics);
         if (state == null) return;
@@ -228,6 +261,7 @@ public final class BoardCanvas extends JPanel {
         drawPieces(g, board);
         drawInteractionEffects(g, board);
         drawFinishCelebration(g, board);
+        drawPlayerFinishCelebration(g, board);
         g.dispose();
     }
 
@@ -247,46 +281,31 @@ public final class BoardCanvas extends JPanel {
         g.drawRoundRect(r.x + 2, r.y + 2, size - 4, size - 4, cell, cell);
     }
 
-
-	/** Paint one board cell according to its semantic type. */
-	private void drawCell(Graphics2D g, Position position, Cell c) {
-		Rectangle r = rect(position);
-
-		Color fill = switch (c.type()) {
-		case START, ARROW -> Theme.softColorOf(c.color());
-		case HOME -> Theme.homePathColorOf(c.color());
-		case SAFE -> Theme.SAFE_SOFT;
-		case REGULAR -> Theme.SURFACE;
-		};
-
-		g.setColor(fill);
-		g.fillRect(r.x, r.y, r.width, r.height);
-
-		// Emphasize home paths without changing game logic.
-		if (c.type() == CellType.HOME) {
-			g.setColor(Theme.colorOf(c.color()));
-			g.setStroke(new BasicStroke(2f));
-		} else {
-			g.setColor(Theme.BORDER);
-			g.setStroke(new BasicStroke(1f));
-		}
-
-		g.drawRect(r.x, r.y, r.width - 1, r.height - 1);
-
-		int cx = r.x + r.width / 2;
-		int cy = r.y + r.height / 2;
-
-		switch (c.type()) {
-		case START -> drawText(g, "#", cx, cy, Theme.colorOf(c.color()), (int) (cell * 0.6));
-		case SAFE -> {
-			g.setColor(Theme.SAFE);
-			g.fill(star(cx, cy, cell * 0.38, cell * 0.16));
-		}
-		case ARROW -> drawArrow(g, c.color(), cx, cy);
-		default -> {
-		}
-		}
-	}
+    /** Paint one board cell according to its semantic type. */
+    private void drawCell(Graphics2D g, Position position, Cell c) {
+        Rectangle r = rect(position);
+        Color fill = switch (c.type()) {
+            case START, ARROW, HOME -> Theme.softColorOf(c.color());
+            case SAFE -> Theme.SAFE_SOFT;
+            case REGULAR -> Theme.SURFACE;
+        };
+        g.setColor(fill);
+        g.fillRect(r.x, r.y, r.width, r.height);
+        g.setColor(Theme.BORDER);
+        g.setStroke(new BasicStroke(1f));
+        g.drawRect(r.x, r.y, r.width, r.height);
+        int cx = r.x + r.width / 2;
+        int cy = r.y + r.height / 2;
+        switch (c.type()) {
+            case START -> drawText(g, "#", cx, cy, Theme.colorOf(c.color()), (int) (cell * 0.6));
+            case SAFE -> {
+                g.setColor(Theme.SAFE);
+                g.fill(star(cx, cy, cell * 0.38, cell * 0.16));
+            }
+            case ARROW -> drawArrow(g, c.color(), cx, cy);
+            default -> { }
+        }
+    }
 
     /** Draw every active Double Block, including simultaneous owners on protected squares. */
     private void drawBlocks(Graphics2D g) {
@@ -335,12 +354,11 @@ public final class BoardCanvas extends JPanel {
         g.drawRect(x, y, d, d);
     }
 
-
-	/** Fill one finishing triangle with a visible player color. */
-	private void fillTriangle(Graphics2D g, PlayerColor color, int[] xs, int[] ys) {
-		g.setColor(Theme.homePathColorOf(color));
-		g.fillPolygon(xs, ys, 3);
-	}
+    /** Fill one finishing triangle with a player color. */
+    private void fillTriangle(Graphics2D g, PlayerColor color, int[] xs, int[] ys) {
+        g.setColor(Theme.softColorOf(color));
+        g.fillPolygon(xs, ys, 3);
+    }
 
     /** Paint visible pieces, respecting temporary animation sprites. */
     private void drawPieces(Graphics2D g, Board board) {
@@ -456,7 +474,7 @@ public final class BoardCanvas extends JPanel {
         };
     }
 
-    /** Paint a pawn and, when legal, its pulsing selection highlight. */
+    /** Paint a numbered koala piece with its pulsing legal-move highlight. */
     private void drawPiece(Graphics2D g, Piece piece, int x, int y, int radius) {
         drawnPieces.add(new DrawnPiece(piece.id(), x, y, radius));
         if (!isBusy() && state.canMove(piece)) {
@@ -471,17 +489,8 @@ public final class BoardCanvas extends JPanel {
             g.drawOval(x - radius - reach + 2, y - radius - reach + 2,
                     2 * (radius + reach - 2), 2 * (radius + reach - 2));
         }
-        g.setColor(new Color(0, 0, 0, 50));
-        g.fillOval(x - radius + 1, y - radius + 3, radius * 2, radius * 2);
-        g.setColor(Theme.colorOf(piece.color()));
-        g.fillOval(x - radius, y - radius, radius * 2, radius * 2);
-        g.setColor(Color.WHITE);
-        g.setStroke(new BasicStroke(Math.max(1.5f, radius * 0.14f)));
-        g.drawOval(x - radius, y - radius, radius * 2, radius * 2);
-        if (radius >= 7) {
-            Color text = piece.color() == PlayerColor.YELLOW ? Theme.INK : Color.WHITE;
-            drawText(g, String.valueOf(piece.number()), x, y, text, Math.max(9, (int) (radius * 1.1)));
-        }
+        // Keep the current animated center, radius and number, but render a colored koala face.
+        KoalaPiecePainter.draw(g, piece.color(), x, y, radius, piece.number());
     }
 
     /** A translucent preview follows only the actual legal Move supplied by MoveValidator. */
@@ -593,6 +602,79 @@ public final class BoardCanvas extends JPanel {
             int size = Math.max(2, (int) (cell * 0.15 * (1 - t)));
             g.fillOval(x - size / 2, y - size / 2, size, size);
         }
+    }
+
+    /** Draw a festive but readable player-ranking announcement above the finished board. */
+    private void drawPlayerFinishCelebration(Graphics2D g, Board board) {
+        if (playerFinishFx == null) return;
+        PlayerFinishEvent event = playerFinishFx.event();
+        double progress = Math.min(1.0, Math.max(0.0,
+                (double) (System.nanoTime() - playerFinishFx.startedAt()) / PLAYER_FINISH_DURATION_NS));
+        double fadeIn = Math.min(1.0, progress / 0.13);
+        double fadeOut = Math.min(1.0, (1.0 - progress) / 0.18);
+        float visibility = (float) Math.max(0.0, Math.min(fadeIn, fadeOut));
+        if (visibility <= 0) return;
+        Graphics2D layer = (Graphics2D) g.create();
+        layer.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, visibility));
+        int boardX = originX;
+        int boardY = originY;
+        int boardSize = cell * board.size();
+        layer.setColor(new Color(15, 23, 42, 78));
+        layer.fillRoundRect(boardX, boardY, boardSize, boardSize, 18, 18);
+        drawConfetti(layer, boardX, boardY, boardSize, progress, event.color());
+        drawFinishBanner(layer, boardX + boardSize / 2, boardY + boardSize / 2,
+                Math.min(boardSize - 28, 490), event, progress);
+        layer.dispose();
+    }
+
+    /** Animate deterministic paper confetti so each animation frame remains flicker-free. */
+    private void drawConfetti(Graphics2D g, int x, int y, int boardSize,
+                              double progress, PlayerColor winnerColor) {
+        Color[] palette = {Theme.colorOf(winnerColor), Theme.HIGHLIGHT,
+                new Color(14, 165, 233), new Color(168, 85, 247), new Color(251, 113, 133)};
+        for (int i = 0; i < 64; i++) {
+            double horizontal = ((i * 67) % 101) / 101.0;
+            double phase = ((i * 41) % 97) / 97.0;
+            double downward = (progress * (0.82 + phase * 0.55) + phase * 0.30) % 1.25;
+            double drift = Math.sin(progress * 11 + i * 1.7) * cell * 0.23;
+            int px = (int) Math.round(x + cell * 0.4 + horizontal * (boardSize - cell * 0.8) + drift);
+            int py = (int) Math.round(y - cell * 0.3 + downward * (boardSize + cell));
+            int width = Math.max(3, cell / 9);
+            int height = Math.max(5, cell / 5);
+            Graphics2D particle = (Graphics2D) g.create();
+            particle.translate(px, py);
+            particle.rotate(progress * 8 + i * 0.62);
+            particle.setColor(palette[i % palette.length]);
+            particle.fillRoundRect(-width / 2, -height / 2, width, height, 2, 2);
+            particle.dispose();
+        }
+    }
+
+    /** Present the player's name and achieved rank on a centered high-contrast celebration card. */
+    private void drawFinishBanner(Graphics2D g, int centerX, int centerY, int width,
+                                  PlayerFinishEvent event, double progress) {
+        int height = Math.max(130, Math.min(190, (int) (width * 0.40)));
+        int lift = (int) Math.round((1 - smoothstep(Math.min(1.0, progress / 0.22))) * 20);
+        int x = centerX - width / 2;
+        int y = centerY - height / 2 + lift;
+        Color winnerColor = Theme.colorOf(event.color());
+        g.setColor(new Color(15, 23, 42, 90));
+        g.fillRoundRect(x + 5, y + 9, width, height, 26, 26);
+        g.setColor(new Color(255, 255, 255, 247));
+        g.fillRoundRect(x, y, width, height, 26, 26);
+        g.setColor(winnerColor);
+        g.setStroke(new BasicStroke(3.0f));
+        g.drawRoundRect(x + 2, y + 2, width - 4, height - 4, 24, 24);
+        g.setColor(winnerColor);
+        g.fillRoundRect(x + width / 4, y + 1, width / 2, 6, 5, 5);
+        int titleSize = Math.max(17, Math.min(27, width / 16));
+        drawText(g, "כל הכבוד!", centerX, y + height * 22 / 100, Theme.INK, titleSize);
+        drawText(g, event.playerName(), centerX, y + height * 43 / 100, winnerColor,
+                Math.max(17, Math.min(24, width / 19)));
+        drawText(g, "כל ארבעת הכלים הגיעו לסיום", centerX,
+                y + height * 63 / 100, Theme.MUTED, Math.max(12, Math.min(17, width / 27)));
+        drawText(g, "מקום " + event.rank(), centerX,
+                y + height * 85 / 100, winnerColor, Math.max(18, Math.min(26, width / 17)));
     }
 
     /** Smooth progress for movement and interaction transitions. */

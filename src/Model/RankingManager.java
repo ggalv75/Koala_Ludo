@@ -4,6 +4,7 @@ import java.util.*;
 
 /** Finishing order and end of game: FR-45, FR-46, FR-47. */
 public final class RankingManager {
+    /** Prevent instantiation of the ranking rules helper. */
     private RankingManager() { }
 
     /** FR-45: when all four pieces are home the player gets the next free place. Returns true if ranked now. */
@@ -28,6 +29,7 @@ public final class RankingManager {
         return standings;
     }
 
+    /** Calculate the next available finishing position. */
     private static int nextRank(GameState state) {
         return 1 + (int) state.players().stream().filter(Player::isFinished).count();
     }

@@ -135,10 +135,12 @@ public final class GameEngine {
         if (state.isFinished(piece)) {
             state.log("כלי " + piece.number() + " של " + player.name() + " הגיע לבית הסיום.");
         }
+        PlayerFinishEvent playerFinish = null;
         if (RankingManager.rankIfCompleted(state, player)) {
+            playerFinish = new PlayerFinishEvent(player.index(), player.name(), player.color(), player.rank());
             state.log(player.name() + " סיים/ה במקום " + player.rank() + ".");
             if (RankingManager.isGameOver(state)) {
-                endGame(move, interaction);
+                endGame(move, interaction, playerFinish);
                 return;
             }
         }
@@ -148,7 +150,7 @@ public final class GameEngine {
         } else {
             passTurn();
         }
-        notifyMoved(move, interaction);
+        notifyMoved(move, interaction, playerFinish);
     }
 
     /** Snapshot all Double Block owners at the squares affected by a move. */
@@ -181,7 +183,7 @@ public final class GameEngine {
     }
 
     /** Produce immutable final rankings and announce the finishing move first. */
-    private void endGame(Move move, PieceInteractionEvent interaction) {
+    private void endGame(Move move, PieceInteractionEvent interaction, PlayerFinishEvent playerFinish) {
         gameClock.stop();
         List<GameResult.Standing> standings = new ArrayList<>();
         for (Player participant : RankingManager.finalStandings(state)) {
@@ -194,7 +196,7 @@ public final class GameEngine {
         state.setLegalMoves(List.of());
         state.setPhase(GameState.Phase.GAME_OVER);
         state.log("המשחק הסתיים. המנצח/ת: " + result.winner().name());
-        notifyMoved(move, interaction);
+        notifyMoved(move, interaction, playerFinish);
         for (GameListener listener : List.copyOf(listeners)) listener.onGameOver(result);
     }
 
@@ -212,10 +214,13 @@ public final class GameEngine {
     }
 
     /** Publish immutable movement and interaction events before refreshing observers. */
-    private void notifyMoved(Move move, PieceInteractionEvent interaction) {
+    private void notifyMoved(Move move, PieceInteractionEvent interaction, PlayerFinishEvent playerFinish) {
         for (GameListener listener : List.copyOf(listeners)) listener.onPieceMoved(move);
         if (interaction.hasVisualEffect()) {
             for (GameListener listener : List.copyOf(listeners)) listener.onPieceInteraction(interaction);
+        }
+        if (playerFinish != null) {
+            for (GameListener listener : List.copyOf(listeners)) listener.onPlayerFinished(playerFinish);
         }
         notifyChanged();
     }

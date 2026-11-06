@@ -6,8 +6,10 @@ import javax.swing.*;
 
 /** Starts the application on the Swing event thread. */
 public final class LudoApplication {
+    /** Prevent construction of the application entry-point utility. */
     private LudoApplication() { }
 
+    /** Launch the application safely on the Swing event dispatch thread. */
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> {
             try {
