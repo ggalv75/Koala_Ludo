@@ -23,7 +23,10 @@ public final class Player {
     /** Final place, or 0 while the player is still playing. */
     public int rank() { return rank; }
     public boolean isFinished() { return rank > 0; }
-    /** False only for the player left last without bringing all pieces home (FR-47). */
+    /**
+     * False only for the player left last without bringing all pieces home (FR-47).
+     * That player still gets the last place, which counts as a loss.
+     */
     public boolean completedAllPieces() { return completedAllPieces; }
 
     void assignRank(int rank, boolean completedAllPieces) {
