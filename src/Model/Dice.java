@@ -10,9 +10,12 @@ import java.util.Random;
 public class Dice {
     private final Random random;
 
+    /** Initialize the random step die for play or deterministic tests. */
     public Dice() { this(new Random()); }
 
+    /** Initialize the random step die for play or deterministic tests. */
     public Dice(Random random) { this.random = Objects.requireNonNull(random); }
 
+    /** Generate one uniformly distributed legal die result. */
     public DiceRoll roll() { return new DiceRoll(1 + random.nextInt(GameRules.DIE_FACES)); }
 }

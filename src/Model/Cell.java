@@ -4,5 +4,6 @@ package Model;
 public record Cell(CellType type, PlayerColor color) {
     static final Cell REGULAR = new Cell(CellType.REGULAR, null);
 
+    /** Report whether this square prevents capturing an opponent. */
     public boolean isProtected() { return type.isProtected(); }
 }

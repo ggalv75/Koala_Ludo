@@ -133,24 +133,29 @@ public final class GameEngine {
         if (state.isFinished(piece)) {
             state.log("כלי " + piece.number() + " של " + player.name() + " הגיע לבית הסיום.");
         }
-        boolean gameOver = endTurnAfterMove(player);
-        notifyMoved(move, interaction);
+        PlayerFinishEvent playerFinish = rankIfAllPiecesHome(player);
+        boolean gameOver = endTurnAfterMove(player, playerFinish != null);
+        notifyMoved(move, interaction, playerFinish);
         if (gameOver) {
             for (GameListener listener : List.copyOf(listeners)) listener.onGameOver(state.result());
         }
     }
 
+    /** FR-45: ranks the player when all four pieces are home. Returns the finish event, or null. */
+    private PlayerFinishEvent rankIfAllPiecesHome(Player player) {
+        if (!RankingManager.rankIfAllPiecesHome(state, player)) return null;
+        state.log(player.name() + " סיים/ה במקום " + player.rank() + ".");
+        return new PlayerFinishEvent(player.index(), player.name(), player.color(), player.rank());
+    }
+
     /**
-     * FR-45 to FR-47 and FR-19: ranks the player if all pieces are home, then ends the game,
-     * gives another roll after a six, or passes the turn. Returns true if the game ended.
+     * FR-47 and FR-19: ends the game, gives another roll after a six, or passes the turn.
+     * Returns true if the game ended.
      */
-    private boolean endTurnAfterMove(Player player) {
-        if (RankingManager.rankIfAllPiecesHome(state, player)) {
-            state.log(player.name() + " סיים/ה במקום " + player.rank() + ".");
-            if (RankingManager.isGameOver(state)) {
-                endGame();
-                return true;
-            }
+    private boolean endTurnAfterMove(Player player, boolean justFinished) {
+        if (justFinished && RankingManager.isGameOver(state)) {
+            endGame();
+            return true;
         }
         if (TurnManager.rollsAgain(player, state.lastRoll())) {
             state.setPhase(GameState.Phase.WAITING_FOR_ROLL);
@@ -216,10 +221,13 @@ public final class GameEngine {
     }
 
     /** Publish immutable movement and interaction events before refreshing observers. */
-    private void notifyMoved(Move move, PieceInteractionEvent interaction) {
+    private void notifyMoved(Move move, PieceInteractionEvent interaction, PlayerFinishEvent playerFinish) {
         for (GameListener listener : List.copyOf(listeners)) listener.onPieceMoved(move);
         if (interaction.hasVisualEffect()) {
             for (GameListener listener : List.copyOf(listeners)) listener.onPieceInteraction(interaction);
+        }
+        if (playerFinish != null) {
+            for (GameListener listener : List.copyOf(listeners)) listener.onPlayerFinished(playerFinish);
         }
         notifyChanged();
     }

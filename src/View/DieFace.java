@@ -8,13 +8,16 @@ public final class DieFace extends JComponent {
     private static final long serialVersionUID = 1L;
     private int value;
 
+    /** Initialize a square visual representation of the step die. */
     public DieFace() { setPreferredSize(new Dimension(76, 76)); }
 
+    /** Update the displayed die face and request a repaint. */
     public void setValue(int value) {
         this.value = value;
         repaint();
     }
 
+    /** Draw the die background, outline and visible pips. */
     @Override
     protected void paintComponent(Graphics graphics) {
         Graphics2D g = (Graphics2D) graphics.create();
