@@ -1,36 +1,55 @@
 package Model;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
 
-/** Finishing order and end of game: FR-45, FR-46, FR-47. */
+/** Finishing order and end of game (FR-45, FR-46, FR-47). */
 public final class RankingManager {
     /** Prevent instantiation of the ranking rules helper. */
     private RankingManager() { }
 
-    /** FR-45: when all four pieces are home the player gets the next free place. Returns true if ranked now. */
-    static boolean rankIfCompleted(GameState state, Player player) {
-        if (player.isFinished() || state.finishedPieceCount(player) < GameRules.PIECES_PER_PLAYER) return false;
-        player.assignRank(nextRank(state), true);
+    /**
+     * FR-45: when all four pieces of the player are home, the player gets the next free place.
+     * Returns true if the player was ranked by this call.
+     */
+    static boolean rankIfAllPiecesHome(GameState state, Player player) {
+        boolean allHome = state.finishedPieceCount(player) == GameRules.PIECES_PER_PLAYER;
+        if (player.isFinished() || !allHome) return false;
+        player.assignRank(nextFreeRank(state), true);
         return true;
     }
 
-    /** FR-47: the game ends when only one player has not finished. */
+    /** FR-47: the game ends when only one player is still playing. */
     static boolean isGameOver(GameState state) {
-        return state.players().stream().filter(player -> !player.isFinished()).count() <= 1;
+        return playersStillPlaying(state).size() <= 1;
     }
 
-    /** FR-47: the remaining player takes the last place without completing. Returns players by rank. */
-    static List<Player> finalStandings(GameState state) {
-        for (Player player : state.players()) {
-            if (!player.isFinished()) player.assignRank(nextRank(state), false);
+    /** FR-47: the player left in the game takes the last place without completing. */
+    static void rankRemainingPlayers(GameState state) {
+        for (Player player : playersStillPlaying(state)) {
+            player.assignRank(nextFreeRank(state), false);
         }
-        List<Player> standings = new ArrayList<>(state.players());
-        standings.sort(Comparator.comparingInt(Player::rank));
+    }
+
+    /** The final ranking table, first place first. Call after every player has a rank. */
+    static List<GameResult.Standing> standings(GameState state) {
+        List<GameResult.Standing> standings = new ArrayList<>();
+        for (Player player : state.players()) {
+            standings.add(new GameResult.Standing(player.rank(), player.name(), player.color(),
+                    player.completedAllPieces()));
+        }
+        standings.sort(Comparator.comparingInt(GameResult.Standing::rank));
         return standings;
     }
 
+    /** Players who have not received a place yet. */
+    private static List<Player> playersStillPlaying(GameState state) {
+        return state.players().stream().filter(player -> !player.isFinished()).toList();
+    }
+
     /** Calculate the next available finishing position. */
-    private static int nextRank(GameState state) {
-        return 1 + (int) state.players().stream().filter(Player::isFinished).count();
+    private static int nextFreeRank(GameState state) {
+        return state.players().size() - playersStillPlaying(state).size() + 1;
     }
 }
