@@ -9,6 +9,7 @@ import java.awt.*;
 public final class ResultsView extends JPanel {
     private static final long serialVersionUID = 1L;
 
+    /** Build the final ranking screen with colored koala avatars. */
     public ResultsView(GameResult result, Runnable onMainMenu) {
         setLayout(new GridBagLayout());
         setBackground(Theme.BACKGROUND);
@@ -25,7 +26,7 @@ public final class ResultsView extends JPanel {
             // FR-47: the player left last simply takes the last place; it is a loss, not "did not finish".
             String text = "מקום " + standing.rank() + ":  " + standing.name();
             JLabel row = Theme.label(text, standing.rank() == 1 ? 22 : 19, standing.rank() == 1);
-            row.setIcon(Theme.colorDot(standing.color(), 18));
+            row.setIcon(KoalaPiecePainter.icon(standing.color(), 28));
             row.setIconTextGap(10);
             row.setHorizontalAlignment(SwingConstants.CENTER);
             places.add(row);

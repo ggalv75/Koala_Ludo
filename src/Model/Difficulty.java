@@ -16,6 +16,7 @@ public enum Difficulty {
     private final int arrowSquares;
     private final int safeSquares;
 
+    /** Store the board dimensions and square counts for one difficulty. */
     Difficulty(String displayName, int boardSize, int trackSquares,
                int homePathSquares, int arrowSquares, int safeSquares) {
         this.displayName = displayName;
@@ -26,19 +27,20 @@ public enum Difficulty {
         this.safeSquares = safeSquares;
     }
 
+    /** Return the localized name of the selected difficulty. */
     public String displayName() { return displayName; }
     /** Number of rows (and columns) of the square board grid. */
     public int boardSize() { return boardSize; }
     /** Squares of the shared track around the board. */
     public int trackSquares() { return trackSquares; }
-    /**
-     * Coloured squares of each home path. Together with the arrow square that leads into it,
-     * a home path is six coloured squares long, as in the Easy board diagram (FR-09).
-     */
+    /** Return the five home squares that combine with the arrow into a six-square colored path. */
     public int homePathSquares() { return homePathSquares; }
+    /** Return the required number of entry arrows. */
     public int arrowSquares() { return arrowSquares; }
+    /** Return the required number of protected safe squares. */
     public int safeSquares() { return safeSquares; }
 
+    /** Show the localized difficulty name in UI controls. */
     @Override
     public String toString() { return displayName; }
 }

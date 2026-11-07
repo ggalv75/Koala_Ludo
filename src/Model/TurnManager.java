@@ -20,6 +20,7 @@ public final class TurnManager {
         THIRD_SIX_CANCELLED
     }
 
+    /** Prevent instantiation of the turn rules helper. */
     private TurnManager() { }
 
     /** Counts consecutive sixes and decides what the player may do with this roll. */

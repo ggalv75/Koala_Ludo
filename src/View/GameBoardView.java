@@ -28,6 +28,7 @@ public final class GameBoardView extends JPanel implements GameListener {
     private GameState displayedState;
     private Move pendingMove;
     private PieceInteractionEvent pendingInteraction;
+    private PlayerFinishEvent pendingPlayerFinish;
 
     /** Build the game UI and connect it to Controller callbacks. */
     public GameBoardView(LongSupplier elapsedSeconds, Runnable onRoll, IntConsumer onPieceClick, Runnable onExit) {
@@ -124,8 +125,8 @@ public final class GameBoardView extends JPanel implements GameListener {
         return component;
     }
 
-    @Override
     /** Remember a committed movement until its state update arrives. */
+    @Override
     public void onPieceMoved(Move move) {
         pendingMove = move; // next onStateChanged contains the committed game state
     }
@@ -136,24 +137,34 @@ public final class GameBoardView extends JPanel implements GameListener {
         pendingInteraction = event;
     }
 
+    /** Cache the earned rank until the finishing move is ready to animate. */
+    @Override
+    public void onPlayerFinished(PlayerFinishEvent event) {
+        pendingPlayerFinish = event;
+    }
+
     /** Refresh the board using the Model's state and any completed movement events. */
     @Override
     public void onStateChanged(GameState state) {
         displayedState = state;
-        canvas.setState(state, pendingMove, pendingInteraction);
+        canvas.setState(state, pendingMove, pendingInteraction, pendingPlayerFinish);
+        PlayerFinishEvent finishedPlayer = pendingPlayerFinish;
         pendingMove = null;
         pendingInteraction = null;
+        pendingPlayerFinish = null;
         if (canvas.isBusy()) canvas.whenEffectsFinish(this::updateRollButton);
         clock.setText(GameClock.format(elapsedSeconds.getAsLong()));
         level.setText("רמת קושי: " + state.difficulty().displayName());
         Player current = state.currentPlayer();
         turn.setText("התור של " + current.name());
-        turn.setIcon(Theme.colorDot(current.color(), 16));
+        turn.setIcon(KoalaPiecePainter.icon(current.color(), 24));
         DiceRoll roll = state.lastRoll();
         die.setValue(roll == null ? 0 : roll.value());
         rollInfo.setText(rollText(state, roll));
         updateRollButton();
-        status.setText("<html>" + Dialogs.escape(state.lastMessage()) + "</html>");
+        String statusMessage = finishedPlayer == null ? state.lastMessage()
+                : finishedPlayer.playerName() + " השלים/ה את כל ארבעת הכלים! מקום " + finishedPlayer.rank();
+        status.setText("<html>" + Dialogs.escape(statusMessage) + "</html>");
         updatePlayers(state);
         log.setText(String.join("\n", state.recentLog()));
         log.setCaretPosition(0);
@@ -174,7 +185,7 @@ public final class GameBoardView extends JPanel implements GameListener {
             String text = player.name() + "  |  בבית: " + state.finishedPieceCount(player) + "/" + GameRules.PIECES_PER_PLAYER;
             if (player.isFinished()) text += "  |  מקום " + player.rank();
             JLabel row = Theme.label(text, 14, player == state.currentPlayer());
-            row.setIcon(Theme.colorDot(player.color(), 14));
+            row.setIcon(KoalaPiecePainter.icon(player.color(), 22));
             row.setIconTextGap(8);
             row.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
             playersList.add(row);

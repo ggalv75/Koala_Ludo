@@ -18,5 +18,6 @@ public final class GameRules {
     /** Keeps names readable on the board and results screens. */
     public static final int MAX_NAME_LENGTH = 15;
 
+    /** Prevent instantiation of the shared rule constants. */
     private GameRules() { }
 }

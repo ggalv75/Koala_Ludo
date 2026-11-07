@@ -5,5 +5,6 @@ package Model;
  * {@code partial} means the piece stops right before an opponent's Double Block (FR-31).
  */
 public record Move(int pieceId, int fromStep, int toStep, boolean release, boolean partial) {
+    /** Calculate the actual number of route steps in this move. */
     public int steps() { return release ? 0 : toStep - fromStep; }
 }
