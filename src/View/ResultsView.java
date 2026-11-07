@@ -23,8 +23,8 @@ public final class ResultsView extends JPanel {
         JPanel places = new JPanel(new GridLayout(0, 1, 0, 10));
         places.setOpaque(false);
         for (GameResult.Standing standing : result.standings()) {
-            String text = "מקום " + standing.rank() + ":  " + standing.name()
-                    + (standing.completedAllPieces() ? "" : "  (לא סיים)");
+            // FR-47: the player left last simply takes the last place; it is a loss, not "did not finish".
+            String text = "מקום " + standing.rank() + ":  " + standing.name();
             JLabel row = Theme.label(text, standing.rank() == 1 ? 22 : 19, standing.rank() == 1);
             row.setIcon(KoalaPiecePainter.icon(standing.color(), 28));
             row.setIconTextGap(10);
