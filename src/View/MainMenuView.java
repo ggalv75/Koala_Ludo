@@ -7,6 +7,7 @@ import java.awt.*;
 public final class MainMenuView extends JPanel {
     private static final long serialVersionUID = 1L;
 
+    /** Build the opening menu and wire each navigation action. */
     public MainMenuView(Runnable onNewGame, Runnable onRules, Runnable onExit) {
         setLayout(new GridBagLayout());
         setBackground(Theme.BACKGROUND);

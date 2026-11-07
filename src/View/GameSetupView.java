@@ -18,6 +18,7 @@ public final class GameSetupView extends JPanel {
 
     @FunctionalInterface
     public interface StartListener {
+        /** Notify the Controller with the chosen game settings. */
         void onStart(Difficulty difficulty, List<String> names, List<PlayerColor> colors);
     }
 
@@ -29,6 +30,7 @@ public final class GameSetupView extends JPanel {
     private final List<JComboBox<Object>> colors = new ArrayList<>();
     private final JPanel[] rows = new JPanel[GameRules.MAX_PLAYERS];
 
+    /** Build the new-game configuration form and callbacks. */
     public GameSetupView(StartListener onStart, Runnable onBack) {
         setLayout(new BorderLayout(0, 14));
         setBackground(Theme.BACKGROUND);
@@ -86,8 +88,10 @@ public final class GameSetupView extends JPanel {
         updateVisibleRows();
     }
 
+    /** Present a validation failure without leaving the setup screen. */
     public void showError(String message) { Dialogs.warning(this, message); }
 
+    /** Create the name and color controls for one player. */
     private JPanel createPlayerRow(int i) {
         JPanel row = new JPanel(new BorderLayout(12, 0));
         row.setBackground(Theme.SURFACE);
@@ -114,20 +118,24 @@ public final class GameSetupView extends JPanel {
         return wrapper;
     }
 
+    /** Return the number of currently selected players. */
     private int count() { return (Integer) playerCount.getSelectedItem(); }
 
+    /** Show only the player rows required by the current count. */
     private void updateVisibleRows() {
         for (int i = 0; i < rows.length; i++) rows[i].setVisible(i < count());
         revalidate();
         repaint();
     }
 
+    /** Collect the names of players enabled in the form. */
     private List<String> selectedNames() {
         List<String> result = new ArrayList<>();
         for (int i = 0; i < count(); i++) result.add(names[i].getText());
         return result;
     }
 
+    /** Collect the colors of players enabled in the form. */
     private List<PlayerColor> selectedColors() {
         List<PlayerColor> result = new ArrayList<>();
         for (int i = 0; i < count(); i++) {

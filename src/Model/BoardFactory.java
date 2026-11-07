@@ -27,8 +27,10 @@ public final class BoardFactory {
 
     private static final Position CENTER = new Position(6, 6);
 
+    /** Prevent instantiation of the board factory. */
     private BoardFactory() { }
 
+    /** Build the correctly configured board for a new game. */
     public static Board create(Difficulty difficulty, Random random) {
         Objects.requireNonNull(difficulty, "difficulty");
         Objects.requireNonNull(random, "random");
@@ -62,10 +64,7 @@ public final class BoardFactory {
         return Math.floorMod(START_INDEX.get(color) + difficulty.trackSquares() - 2, TRACK.size());
     }
 
-    /**
-     * FR-11 / FR-14: safe squares get random locations every game, only on regular squares of the
-     * shared track (never on start, arrow or home squares), with no two specials on one square.
-     */
+    /** FR-11/FR-14: place safe squares randomly only on unoccupied regular track cells. */
     private static void placeSafeSquares(Map<Integer, Cell> special, int count, Random random) {
         List<Integer> free = new ArrayList<>();
         for (int i = 0; i < TRACK.size(); i++) {
@@ -88,6 +87,7 @@ public final class BoardFactory {
         return route;
     }
 
+    /** Generate a straight sequence of home-path positions. */
     private static List<Position> line(int row, int col, int rowStep, int colStep) {
         List<Position> squares = new ArrayList<>();
         for (int i = 0; i < 5; i++) squares.add(new Position(row + i * rowStep, col + i * colStep));

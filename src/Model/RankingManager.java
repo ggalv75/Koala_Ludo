@@ -6,6 +6,7 @@ import java.util.List;
 
 /** Finishing order and end of game (FR-45, FR-46, FR-47). */
 public final class RankingManager {
+    /** Prevent instantiation of the ranking rules helper. */
     private RankingManager() { }
 
     /**
@@ -42,10 +43,12 @@ public final class RankingManager {
         return standings;
     }
 
+    /** Players who have not received a place yet. */
     private static List<Player> playersStillPlaying(GameState state) {
         return state.players().stream().filter(player -> !player.isFinished()).toList();
     }
 
+    /** Calculate the next available finishing position. */
     private static int nextFreeRank(GameState state) {
         return state.players().size() - playersStillPlaying(state).size() + 1;
     }

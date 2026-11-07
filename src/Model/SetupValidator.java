@@ -7,6 +7,7 @@ import java.util.*;
  * Lives in the Model so the View only collects input and shows the message (SDP 5.3.4, Done #5).
  */
 public final class SetupValidator {
+    /** Prevent instantiation of the setup validation helper. */
     private SetupValidator() { }
 
     /** Returns a message describing the first problem, or empty when the settings are valid. */
