@@ -49,7 +49,7 @@ public final class GameState {
     public int currentPlayerIndex() { return currentPlayerIndex; }
     /** Return the current streak of successive sixes. */
     public int consecutiveSixes() { return consecutiveSixes; }
-    /** The roll of the current turn, or null before the player rolls. */
+    /** The most recent roll, kept after the turn passes so the die stays visible; null before the first roll. */
     public DiceRoll lastRoll() { return lastRoll; }
     /** Return the current phase of the game turn. */
     public Phase phase() { return phase; }
