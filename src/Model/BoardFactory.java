@@ -64,12 +64,17 @@ public final class BoardFactory {
         return Math.floorMod(START_INDEX.get(color) + difficulty.trackSquares() - 2, TRACK.size());
     }
 
-    /** FR-11/FR-14: place safe squares randomly only on unoccupied regular track cells. */
+    /** Randomly place safe squares on distinct regular track cells. */
     private static void placeSafeSquares(Map<Integer, Cell> special, int count, Random random) {
         List<Integer> free = new ArrayList<>();
         for (int i = 0; i < TRACK.size(); i++) {
             if (!special.containsKey(i)) free.add(i);
         }
+
+        if (count < 0 || count > free.size()) {
+            throw new IllegalArgumentException("Invalid safe square count: " + count);
+        }
+
         Collections.shuffle(free, random);
         for (int i = 0; i < count; i++) {
             special.put(free.get(i), new Cell(CellType.SAFE, null));
