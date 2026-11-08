@@ -161,7 +161,8 @@ class TurnManagerTest {
         assertEquals(0, state.consecutiveSixes());
         assertEquals(GameState.Phase.WAITING_FOR_ROLL, state.phase());
         assertTrue(state.legalMoves().isEmpty());
-        assertEquals(SIX, state.lastRoll(), "The die keeps showing the last roll");
+        assertNull(state.lastRoll(), "No active roll for the next player");
+        assertEquals(SIX, state.latestRoll(), "The die keeps showing the last result");
     }
 
     @Test

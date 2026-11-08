@@ -23,7 +23,8 @@ class TurnFlowTest {
         GameState state = engine.state();
         assertEquals(1, state.currentPlayerIndex());
         assertEquals(GameState.Phase.WAITING_FOR_ROLL, state.phase());
-        assertEquals(3, state.lastRoll().value(), "The die still shows the roll after the turn passes");
+        assertNull(state.lastRoll(), "No active roll for the next player");
+        assertEquals(3, state.latestRoll().value(), "The die still shows the roll after the turn passes");
     }
 
     @Test
