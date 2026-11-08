@@ -135,6 +135,7 @@ public final class GameSetupView extends JPanel {
 	    header.add(heading, BorderLayout.LINE_START);
 	
 	    JButton backButton = createBackButton();
+	    backButton.setName("setup-back");
 	    backButton.addActionListener(e -> onBack.run());
 	
 	    JPanel backWrapper = new JPanel(new FlowLayout(FlowLayout.TRAILING, 0, 0));
@@ -372,6 +373,7 @@ public final class GameSetupView extends JPanel {
 	    footer.setOpaque(false);
 	
 	    JButton startButton = actionButton("התחלת משחק", true);
+	    startButton.setName("setup-start");
 	    startButton.setPreferredSize(new Dimension(185, 50));
 	    startButton.setMinimumSize(new Dimension(185, 50));
 	    startButton.setMaximumSize(new Dimension(185, 50));

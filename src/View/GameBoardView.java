@@ -43,6 +43,7 @@ public final class GameBoardView extends JPanel implements GameListener {
         header.setOpaque(false);
         header.add(Theme.label("לודו קואלה", 24, true), BorderLayout.LINE_START);
         JButton exit = Theme.button("יציאה למסך הפתיחה", false);
+        exit.setName("board-exit");
         exit.addActionListener(e -> onExit.run());
         header.add(exit, BorderLayout.LINE_END);
         add(header, BorderLayout.NORTH);
@@ -68,6 +69,7 @@ public final class GameBoardView extends JPanel implements GameListener {
         info.add(level);
         info.add(turn);
         JCheckBox animations = new JCheckBox("אנימציות משחק וקובייה", true);
+        animations.setName("animations-toggle");
         animations.setOpaque(false);
         animations.setFont(Theme.font(13, false));
         animations.addActionListener(e -> {
@@ -86,6 +88,7 @@ public final class GameBoardView extends JPanel implements GameListener {
         dieRow.add(die, BorderLayout.LINE_START);
         dieRow.add(rollInfo, BorderLayout.CENTER);
         dice.add(dieRow, BorderLayout.NORTH);
+        rollButton.setName("roll-button");
         rollButton.addActionListener(e -> startVisualRoll(onRoll));
         dice.add(rollButton, BorderLayout.CENTER);
         rollButton.setPreferredSize(new Dimension(260, 44));

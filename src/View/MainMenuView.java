@@ -110,6 +110,13 @@ public final class MainMenuView extends JPanel {
 
         JButton exit = new MenuButton("יציאה", false);
 
+        // Stable identifiers for tests, independent of the displayed text.
+        newGame.setName("menu-new-game");
+        rules.setName("menu-rules");
+        history.setName("menu-history");
+        questions.setName("menu-questions");
+        exit.setName("menu-exit");
+
         // Planned for iteration 3.
         history.setEnabled(false);
         questions.setEnabled(false);

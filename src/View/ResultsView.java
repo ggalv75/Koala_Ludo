@@ -40,6 +40,7 @@ public final class ResultsView extends JPanel {
         info.setHorizontalAlignment(SwingConstants.CENTER);
         bottom.add(info);
         JButton menu = Theme.button("חזרה למסך הפתיחה", true);
+        menu.setName("results-main-menu");
         menu.addActionListener(e -> onMainMenu.run());
         bottom.add(menu);
         card.add(bottom, BorderLayout.SOUTH);
