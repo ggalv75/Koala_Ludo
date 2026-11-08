@@ -65,7 +65,10 @@ public final class GameEngine {
                 state.setPhase(GameState.Phase.WAITING_FOR_MOVE);
                 state.log("בחרו כלי מסומן להזזה.");
             }
-            case ROLL_AGAIN -> state.log("אין מהלך חוקי, אבל 6 מזכה בהטלה נוספת.");
+            case ROLL_AGAIN -> {
+                state.log("אין מהלך חוקי, אבל 6 מזכה בהטלה נוספת.");
+                state.setLastRoll(null);
+            }
             case PASS_TURN -> {
                 state.log("אין מהלך חוקי. התור עובר.");
                 passTurn();
@@ -148,16 +151,14 @@ public final class GameEngine {
         return new PlayerFinishEvent(player.index(), player.name(), player.color(), player.rank());
     }
 
-    /**
-     * FR-47 and FR-19: ends the game, gives another roll after a six, or passes the turn.
-     * Returns true if the game ended.
-     */
+    /** End the game, grant an extra roll or pass the turn; return whether play ended. */
     private boolean endTurnAfterMove(Player player, boolean justFinished) {
         if (justFinished && RankingManager.isGameOver(state)) {
             endGame();
             return true;
         }
         if (TurnManager.rollsAgain(player, state.lastRoll())) {
+            state.setLastRoll(null);
             state.setPhase(GameState.Phase.WAITING_FOR_ROLL);
             state.log("בזכות ה-6, " + player.name() + " מטיל/ה שוב.");
         } else {
@@ -203,6 +204,7 @@ public final class GameEngine {
                 gameClock.elapsedSeconds(), gameClock.endedAt());
         state.setResult(result);
         state.setLegalMoves(List.of());
+        state.setLastRoll(null);
         state.setPhase(GameState.Phase.GAME_OVER);
         state.log("המשחק הסתיים. המנצח/ת: " + result.winner().name());
     }

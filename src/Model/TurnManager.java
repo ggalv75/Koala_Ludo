@@ -39,10 +39,7 @@ public final class TurnManager {
         return roll.isSix() && !player.isFinished();
     }
 
-    /**
-     * FR-18, FR-46: the turn passes to the next player in order who has not finished.
-     * The last roll stays in the state so the die keeps showing it.
-     */
+    /** Pass the turn to the next unfinished player and clear only the active roll. */
     static void passTurn(GameState state) {
         List<Player> players = state.players();
         int next = state.currentPlayerIndex();
@@ -52,6 +49,7 @@ public final class TurnManager {
 
         state.setCurrentPlayerIndex(next);
         state.setConsecutiveSixes(0);
+        state.setLastRoll(null);
         state.setLegalMoves(List.of());
         state.setPhase(GameState.Phase.WAITING_FOR_ROLL);
     }

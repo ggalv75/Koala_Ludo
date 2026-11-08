@@ -161,9 +161,9 @@ public final class GameBoardView extends JPanel implements GameListener {
         Player current = state.currentPlayer();
         turn.setText("התור של " + current.name());
         turn.setIcon(KoalaPiecePainter.icon(current.color(), 24));
-        DiceRoll roll = state.lastRoll();
-        die.setValue(roll == null ? 0 : roll.value());
-        rollInfo.setText(rollText(state, roll));
+        DiceRoll latest = state.latestRoll();
+        die.setValue(latest == null ? 0 : latest.value());
+        if (!die.isRolling()) rollInfo.setText(rollText(state));
         updateRollButton();
         String statusMessage = finishedPlayer == null ? state.lastMessage()
                 : finishedPlayer.playerName() + " השלים/ה את כל ארבעת הכלים! מקום " + finishedPlayer.rank();
@@ -174,11 +174,33 @@ public final class GameBoardView extends JPanel implements GameListener {
         log.applyComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
     }
 
-    /** The die keeps its last value between turns, so the label says whether it is the current roll. */
-    private static String rollText(GameState state, DiceRoll roll) {
-        if (roll == null) return "ממתין להטלה";
-        if (state.phase() == GameState.Phase.WAITING_FOR_MOVE) return "תוצאת ההטלה: " + roll.value();
-        return "הטלה אחרונה: " + roll.value();
+    /** Label the active roll separately from the last visible result. */
+    private static String rollText(GameState state) {
+        DiceRoll active = state.lastRoll();
+        if (state.phase() == GameState.Phase.WAITING_FOR_MOVE && active != null)
+            return "תוצאת ההטלה: " + active.value();
+        DiceRoll latest = state.latestRoll();
+        return latest == null ? "ממתין להטלה" : "ההטלה האחרונה: " + latest.value();
+    }
+
+    /** Start one animated die roll without letting another roll overlap it. */
+    private void startVisualRoll(Runnable onRoll) {
+        if (displayedState == null || displayedState.phase() != GameState.Phase.WAITING_FOR_ROLL
+                || canvas.isBusy() || die.isRolling()) return;
+        if (!animationsEnabled) {
+            onRoll.run();
+            return;
+        }
+        die.animateRoll(() -> {
+            try {
+                if (displayedState != null
+                        && displayedState.phase() == GameState.Phase.WAITING_FOR_ROLL) onRoll.run();
+            } finally {
+                updateRollButton();
+            }
+        });
+        rollInfo.setText("הקובייה מתגלגלת...");
+        updateRollButton();
     }
 
     /** Refresh player progress and ranking labels. */

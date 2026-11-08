@@ -50,9 +50,9 @@ public final class GameState {
     public int currentPlayerIndex() { return currentPlayerIndex; }
     /** Return the current streak of successive sixes. */
     public int consecutiveSixes() { return consecutiveSixes; }
-    /** The most recent roll, kept after the turn passes so the die stays visible; null before the first roll. */
+    /** Return the roll awaiting a piece move, or null when no roll is active. */
     public DiceRoll lastRoll() { return lastRoll; }
-    /** Return the latest real die result, including after the turn changes. */
+    /** Return the last actual die result, including between turns. */
     public DiceRoll latestRoll() { return latestRoll; }
     /** Return the current phase of the game turn. */
     public Phase phase() { return phase; }
@@ -99,7 +99,7 @@ public final class GameState {
     void setCurrentPlayerIndex(int index) { this.currentPlayerIndex = index; }
     /** Update the current six-roll streak. */
     void setConsecutiveSixes(int count) { this.consecutiveSixes = count; }
-    /** Update the active turn roll and remember real results for display. */
+    /** Update the active roll and retain non-null results for the persistent die display. */
     void setLastRoll(DiceRoll roll) {
         this.lastRoll = roll;
         if (roll != null) this.latestRoll = roll;

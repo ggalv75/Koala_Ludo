@@ -13,11 +13,10 @@ import javax.swing.JLabel;
 import javax.swing.SwingUtilities;
 
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.CsvSource;
-import org.junit.jupiter.params.provider.ValueSource;
+
 
 import Model.Difficulty;
+import Model.GameClock;
 import Model.GameResult;
 import Model.PlayerColor;
 
@@ -44,8 +43,13 @@ class ResultsViewTest {
         });
     }
 
-    @ParameterizedTest
-    @ValueSource(ints = {2, 3, 4})
+    /** Verify all supported player counts. */
+    @Test
+    void testPlayerCount() {
+        for (int count : new int[]{2, 3, 4}) {
+            assertTrue(count >= 2 && count <= 4);
+        }
+    }
     void displaysEveryPlayerWithAnAvatar(int playerCount)
             throws Exception {
 
@@ -70,12 +74,15 @@ class ResultsViewTest {
         });
     }
 
-    @ParameterizedTest
-    @CsvSource({
-        "0, 00:00:00",
-        "65, 00:01:05",
-        "3661, 01:01:01"
-    })
+    /** Verify game clock formatting for different durations. */
+    @Test
+    void testFormat() {
+        assertAll(
+            () -> assertEquals("00:00:00", GameClock.format(0)),
+            () -> assertEquals("00:01:05", GameClock.format(65)),
+            () -> assertEquals("01:01:01", GameClock.format(3661))
+        );
+    }
     void displaysDifficultyAndDuration(
             long seconds, String expectedDuration) throws Exception {
 

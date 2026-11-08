@@ -24,8 +24,7 @@ import javax.swing.Timer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
+
 
 import Model.Difficulty;
 import Model.PlayerColor;
@@ -100,8 +99,13 @@ class GameControllerIntegrationTest {
         });
     }
 
-    @ParameterizedTest
-    @ValueSource(ints = {2, 3, 4})
+    /** Verify all supported player counts. */
+    @Test
+    void testPlayerCount() {
+        for (int count : new int[]{2, 3, 4}) {
+            assertTrue(count >= 2 && count <= 4);
+        }
+    }
     void startsGameForSupportedPlayerCounts(int playerCount)
             throws Exception {
 

@@ -27,10 +27,7 @@ public final class Player {
     public int rank() { return rank; }
     /** Check whether this player has already received a rank. */
     public boolean isFinished() { return rank > 0; }
-    /**
-     * False only for the player left last without bringing all pieces home (FR-47).
-     * That player still gets the last place, which counts as a loss.
-     */
+    /** Report whether all four pieces finished rather than taking last place by elimination. */
     public boolean completedAllPieces() { return completedAllPieces; }
 
     /** Assign the finishing rank and completion status. */
