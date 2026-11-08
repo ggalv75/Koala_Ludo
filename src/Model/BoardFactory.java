@@ -12,18 +12,18 @@ public final class BoardFactory {
 
     /** FR-08: index of each colour's start square on the shared track (fixed by the board diagram). */
     private static final Map<PlayerColor, Integer> START_INDEX = Map.of(
-            PlayerColor.RED, 0, PlayerColor.GREEN, 13, PlayerColor.YELLOW, 26, PlayerColor.BLUE, 39);
+            PlayerColor.GREEN, 0, PlayerColor.YELLOW, 13, PlayerColor.BLUE, 26, PlayerColor.RED, 39);
 
     /** FR-09: the coloured home path of each player, from the arrow towards the centre. */
     private static final Map<PlayerColor, List<Position>> HOME_PATHS = Map.of(
-            PlayerColor.RED, line(7, 1, 0, 1),
-            PlayerColor.GREEN, line(1, 7, 1, 0),
-            PlayerColor.YELLOW, line(7, 13, 0, -1),
-            PlayerColor.BLUE, line(13, 7, -1, 0));
+            PlayerColor.GREEN, line(7, 1, 0, 1),
+            PlayerColor.YELLOW, line(1, 7, 1, 0),
+            PlayerColor.BLUE, line(7, 13, 0, -1),
+            PlayerColor.RED, line(13, 7, -1, 0));
 
     private static final Map<PlayerColor, Position> CASTLES = Map.of(
-            PlayerColor.RED, new Position(0, 0), PlayerColor.GREEN, new Position(0, 9),
-            PlayerColor.YELLOW, new Position(9, 9), PlayerColor.BLUE, new Position(9, 0));
+            PlayerColor.GREEN, new Position(0, 0), PlayerColor.YELLOW, new Position(0, 9),
+            PlayerColor.BLUE, new Position(9, 9), PlayerColor.RED, new Position(9, 0));
 
     private static final Position CENTER = new Position(6, 6);
 
@@ -64,12 +64,17 @@ public final class BoardFactory {
         return Math.floorMod(START_INDEX.get(color) + difficulty.trackSquares() - 2, TRACK.size());
     }
 
-    /** FR-11/FR-14: place safe squares randomly only on unoccupied regular track cells. */
+    /** Randomly place safe squares on distinct regular track cells. */
     private static void placeSafeSquares(Map<Integer, Cell> special, int count, Random random) {
         List<Integer> free = new ArrayList<>();
         for (int i = 0; i < TRACK.size(); i++) {
             if (!special.containsKey(i)) free.add(i);
         }
+
+        if (count < 0 || count > free.size()) {
+            throw new IllegalArgumentException("Invalid safe square count: " + count);
+        }
+
         Collections.shuffle(free, random);
         for (int i = 0; i < count; i++) {
             special.put(free.get(i), new Cell(CellType.SAFE, null));
@@ -94,7 +99,7 @@ public final class BoardFactory {
         return List.copyOf(squares);
     }
 
-    /** The 52 track squares of the 15x15 board in clockwise order, starting at Red's start square. */
+    /** The 52 track squares in clockwise order, starting at Green's start square. */
     private static List<Position> createTrack() {
         List<Position> t = new ArrayList<>();
         for (int c = 1; c <= 5; c++) t.add(new Position(6, c));

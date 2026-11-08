@@ -6,7 +6,7 @@ import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
 
-/** Shared colours, fonts and small widget factories, so every screen looks the same. */
+/** Shared colors, fonts and small widget factories, so every screen looks the same. */
 public final class Theme {
     public static final Color BACKGROUND = new Color(246, 247, 251);
     public static final Color SURFACE = Color.WHITE;
@@ -18,10 +18,32 @@ public final class Theme {
     public static final Color SAFE_SOFT = new Color(220, 245, 235);
     public static final Color HIGHLIGHT = new Color(251, 191, 36);
 
+    // Shared Koala UI color palette.
+    public static final Color KOALA_PRIMARY = new Color(37, 111, 86);
+    public static final Color KOALA_PRIMARY_DARK = new Color(24, 85, 65);
+    public static final Color KOALA_TEXT = new Color(35, 63, 55);
+    public static final Color KOALA_MUTED = new Color(104, 131, 119);
+    public static final Color KOALA_BACKGROUND = new Color(235, 244, 239);
+    public static final Color KOALA_BORDER = new Color(216, 231, 222);
+    public static final Color KOALA_ROW_BACKGROUND = new Color(246, 249, 247);
+    public static final Color KOALA_ERROR = new Color(175, 49, 49);
+
+    private static final Color KOALA_GRADIENT_START = new Color(235, 247, 239);
+    private static final Color KOALA_GRADIENT_END = new Color(216, 234, 236);
+
     private static final String FONT_FAMILY = Font.DIALOG;
 
     /** Prevent instantiation of the shared Swing theme. */
     private Theme() { }
+    
+
+    /**
+     * Creates the shared Koala background gradient.
+     * Used by the main menu and game setup screens.
+     */
+    public static Paint koalaBackgroundGradient(int width, int height) {
+        return new GradientPaint(0, 0, KOALA_GRADIENT_START, width, height, KOALA_GRADIENT_END);
+    }
 
     /** Build a theme-consistent dialog font at the requested size. */
     public static Font font(int size, boolean bold) {
@@ -47,6 +69,26 @@ public final class Theme {
             case BLUE -> new Color(225, 240, 253);
         };
     }
+    
+	/** Stronger background colors for home paths and finish triangles. */
+    public static Color boardPathColorOf(PlayerColor color) {
+        return switch (color) {
+            case RED -> new Color(239, 105, 98);
+            case GREEN -> new Color(104, 190, 115);
+            case YELLOW -> new Color(247, 205, 65);
+            case BLUE -> new Color(90, 165, 235);
+        };
+    }
+	
+	/** Strong, high-contrast colors for board arrows. */
+	public static Color boardArrowColorOf(PlayerColor color) {
+	    return switch (color) {
+	        case RED -> new Color(190, 25, 25);
+	        case GREEN -> new Color(20, 125, 45);
+	        case YELLOW -> new Color(165, 115, 0);
+	        case BLUE -> new Color(15, 90, 190);
+	    };
+	}
 
     /** Create a theme-consistent text label. */
     public static JLabel label(String text, int size, boolean bold) {

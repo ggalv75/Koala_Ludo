@@ -18,29 +18,42 @@ public final class InteractionRules {
         return List.copyOf(found);
     }
 
-    /** Return every owner with two or more pieces on the same square (FR-30/FR-32). */
-    public static Set<Integer> blockOwners(GameState state, Position square) {
-        if (square == null) return Set.of();
-        Map<Integer, Integer> counts = new HashMap<>();
-        for (Piece piece : piecesAt(state, square)) {
-            counts.merge(piece.ownerIndex(), 1, Integer::sum);
-        }
-        Set<Integer> owners = new TreeSet<>();
-        counts.forEach((owner, count) -> {
-            if (count >= 2) owners.add(owner);
-        });
-        return Collections.unmodifiableSet(owners);
-    }
-
-    /** Detect whether at least one Double Block occupies the square (FR-30). */
-    public static boolean isDoubleBlock(GameState state, Position square) {
-        return !blockOwners(state, square).isEmpty();
-    }
-
-    /** Reject landing on or crossing any opponent's Double Block (FR-30/FR-31). */
-    public static boolean hasOpponentDoubleBlock(GameState state, int movingOwner, Position square) {
-        return blockOwners(state, square).stream().anyMatch(owner -> owner != movingOwner);
-    }
+	/** Count pieces belonging to each player on a given square. */
+	private static Map<Integer, Integer> countPiecesByOwner(GameState state, Position square) {
+	    if (square == null) return Map.of();
+	
+	    Map<Integer, Integer> counts = new HashMap<>();
+	    for (Piece piece : state.pieces()) {
+	        if (square.equals(state.positionOf(piece))) {
+	            counts.merge(piece.ownerIndex(), 1, Integer::sum);
+	        }
+	    }
+	    return counts;
+	}
+	
+	/** Return all players with at least two pieces on the same square. */
+	public static Set<Integer> blockOwners(GameState state, Position square) {
+	    Map<Integer, Integer> counts = countPiecesByOwner(state, square);
+	    Set<Integer> owners = new TreeSet<>();
+	
+	    counts.forEach((owner, count) -> {
+	        if (count >= 2) owners.add(owner);
+	    });
+	
+	    return Collections.unmodifiableSet(owners);
+	}
+	
+	/** Check whether a square contains any Double Block. */
+	public static boolean isDoubleBlock(GameState state, Position square) {
+	    return countPiecesByOwner(state, square).values().stream()
+	            .anyMatch(count -> count >= 2);
+	}
+	
+	/** Check whether an opponent has a Double Block on the square. */
+	public static boolean hasOpponentDoubleBlock(GameState state, int movingOwner, Position square) {
+	    return countPiecesByOwner(state, square).entrySet().stream()
+	            .anyMatch(entry -> entry.getKey() != movingOwner && entry.getValue() >= 2);
+	}
 
     /** Find the sole capturable opposing piece on an unprotected square (FR-28/FR-29). */
     public static Optional<Piece> capturableOpponent(GameState state, Piece arriving) {

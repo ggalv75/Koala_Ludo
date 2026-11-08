@@ -1,6 +1,6 @@
 package Model;
 
-/** The four player colours, in clockwise board order. Screen colours are defined in the View (View.Theme). */
+/** Player colors. Board positions are defined in BoardFactory, while display colors are defined in View.Theme. */
 public enum PlayerColor {
     RED("אדום"),
     GREEN("ירוק"),
