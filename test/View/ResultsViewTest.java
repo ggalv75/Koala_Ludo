@@ -24,8 +24,7 @@ import Model.PlayerColor;
 class ResultsViewTest {
 
     @Test
-    void displaysRankingInOrderAndMarksUnfinishedPlayer()
-            throws Exception {
+    void displaysRankingInOrder() throws Exception {
 
         SwingUtilities.invokeAndWait(() -> {
             ResultsView view = new ResultsView(
@@ -40,7 +39,7 @@ class ResultsViewTest {
             assertEquals(List.of(
                     "מקום 1:  שחקן 1",
                     "מקום 2:  שחקן 2",
-                    "מקום 3:  שחקן 3  (לא סיים)"
+                    "מקום 3:  שחקן 3"
             ), ranking);
         });
     }

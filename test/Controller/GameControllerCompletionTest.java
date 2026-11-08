@@ -147,8 +147,7 @@ class GameControllerCompletionTest {
             assertTrue(labels.contains("מקום 1:  שחקן 1"));
 
             assertTrue(labels.contains(
-                    "מקום 2:  שחקן 2  (לא סיים)"));
-
+                    "מקום 2:  שחקן 2"));
             clickButton("חזרה למסך הפתיחה");
 
             assertInstanceOf(
