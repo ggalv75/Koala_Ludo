@@ -44,4 +44,19 @@ class DiceTest {
         assertTrue(new DiceRoll(6).isSix());
         assertFalse(new DiceRoll(5).isSix());
     }
+
+    @Test
+    @DisplayName("FR-15: each face comes up with roughly equal probability")
+    void everyFaceHasRoughlyEqualProbability() {
+        Dice dice = new Dice(new Random(2026));
+        int rolls = 60_000;
+        int[] counts = new int[7];
+        for (int i = 0; i < rolls; i++) counts[dice.roll().value()]++;
+
+        int expected = rolls / 6; // 10,000 per face
+        for (int face = 1; face <= 6; face++) {
+            assertTrue(Math.abs(counts[face] - expected) < expected * 0.05,
+                    "Face " + face + " appeared " + counts[face] + " times");
+        }
+    }
 }

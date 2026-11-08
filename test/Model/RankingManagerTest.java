@@ -122,6 +122,23 @@ class RankingManagerTest {
         assertEquals("P2", standings.get(2).name());
     }
 
+    @Test
+    @DisplayName("FR-45, FR-47: in a 4-player game the places are 1-3 by finishing order and 4 for the last")
+    void fourPlayerFullRanking() {
+        GameState state = TestSupport.newState(4);
+        finish(state, state.players().get(2));
+        finish(state, state.players().get(0));
+        finish(state, state.players().get(3));
+        RankingManager.rankRemainingPlayers(state);
+
+        assertEquals(List.of(1, 2, 3, 4), RankingManager.standings(state).stream()
+                .map(GameResult.Standing::rank).toList());
+        assertEquals(List.of("P3", "P1", "P4", "P2"), RankingManager.standings(state).stream()
+                .map(GameResult.Standing::name).toList());
+        assertFalse(state.players().get(1).completedAllPieces());
+    }
+
+
     private static void finish(GameState state, Player player) {
         TestSupport.bringAllPiecesHome(state, player);
         RankingManager.rankIfAllPiecesHome(state, player);

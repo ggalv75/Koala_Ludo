@@ -2,6 +2,7 @@ package Model;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -22,7 +23,8 @@ class TurnFlowTest {
         GameState state = engine.state();
         assertEquals(1, state.currentPlayerIndex());
         assertEquals(GameState.Phase.WAITING_FOR_ROLL, state.phase());
-        assertEquals(3, state.lastRoll().value(), "The die still shows the roll after the turn passes");
+        assertNull(state.lastRoll(), "No active roll for the next player");
+        assertEquals(3, state.latestRoll().value(), "The die still shows the roll after the turn passes");
     }
 
     @Test
@@ -108,5 +110,67 @@ class TurnFlowTest {
         int dorsPiece = 4; // belongs to the other player
         assertFalse(engine.movePiece(dorsPiece));
         assertEquals(GameState.Phase.WAITING_FOR_MOVE, engine.state().phase());
+    }
+
+    /** Gal has three pieces home and the fourth {@code stepsBefore} squares before the finish. */
+    private static GameEngine galNearFinish(int players, int stepsBefore, Integer... dieValues) {
+        GameEngine engine = TestSupport.newEngine(players, dieValues);
+        GameState state = engine.state();
+        int finish = state.board().finishStep();
+        List<Piece> galsPieces = state.piecesOf(state.players().get(0));
+        for (int i = 0; i < 3; i++) galsPieces.get(i).moveTo(finish);
+        galsPieces.get(3).moveTo(finish - stepsBefore);
+        return engine;
+    }
+
+    @Test
+    @DisplayName("FR-19: a six with no legal move keeps the turn and counts toward the streak")
+    void sixWithoutLegalMoveGivesAnotherRollInEngine() {
+        GameEngine engine = galNearFinish(2, 2, 6); // a six overshoots the finish
+        engine.rollDice();
+
+        GameState state = engine.state();
+        assertEquals(0, state.currentPlayerIndex(), "Still Gal's turn");
+        assertEquals(GameState.Phase.WAITING_FOR_ROLL, state.phase());
+        assertEquals(1, state.consecutiveSixes());
+        assertEquals(state.board().finishStep() - 2, state.piece(3).step(), "Nothing moved");
+    }
+
+    @Test
+    @DisplayName("FR-20: three sixes with no legal move at all still cancel the third and pass the turn")
+    void threeSixesWithoutAnyMovePassTurn() {
+        GameEngine engine = galNearFinish(2, 2, 6, 6, 6);
+        engine.rollDice();
+        engine.rollDice();
+        engine.rollDice();
+
+        GameState state = engine.state();
+        assertEquals(1, state.currentPlayerIndex());
+        assertEquals(0, state.consecutiveSixes());
+    }
+
+    @Test
+    @DisplayName("FR-18: a piece on the board with no legal move does not move and the turn passes")
+    void pieceOnBoardWithoutLegalMovePassesTurn() {
+        GameEngine engine = galNearFinish(2, 2, 5); // 5 overshoots, the finish needs an exact roll
+        engine.rollDice();
+
+        GameState state = engine.state();
+        assertEquals(1, state.currentPlayerIndex());
+        assertEquals(state.board().finishStep() - 2, state.piece(3).step());
+    }
+
+    @Test
+    @DisplayName("FR-20: after a cancelled third six, the next player's streak starts from zero")
+    void sixStreakDoesNotCarryOverToNextPlayer() {
+        GameEngine engine = TestSupport.newEngine(2, 6, 6, 6, 6);
+        engine.rollDice(); engine.movePiece(GAL_FIRST_PIECE); // 6: release
+        engine.rollDice(); engine.movePiece(GAL_FIRST_PIECE); // 6: move
+        engine.rollDice();                                    // 6: third six, cancelled, turn passes
+        assertEquals(1, engine.state().currentPlayerIndex());
+
+        engine.rollDice(); // Dor's first six
+        assertEquals(1, engine.state().consecutiveSixes(), "Dor's streak starts from zero");
+        assertEquals(GameState.Phase.WAITING_FOR_MOVE, engine.state().phase(), "Dor's six is not cancelled");
     }
 }
