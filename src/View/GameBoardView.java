@@ -29,6 +29,7 @@ public final class GameBoardView extends JPanel implements GameListener {
     private Move pendingMove;
     private PieceInteractionEvent pendingInteraction;
     private PlayerFinishEvent pendingPlayerFinish;
+    private boolean animationsEnabled = true;
 
     /** Build the game UI and connect it to Controller callbacks. */
     public GameBoardView(LongSupplier elapsedSeconds, Runnable onRoll, IntConsumer onPieceClick, Runnable onExit) {
@@ -66,11 +67,13 @@ public final class GameBoardView extends JPanel implements GameListener {
         info.add(clock);
         info.add(level);
         info.add(turn);
-        JCheckBox animations = new JCheckBox("אנימציות תנועה ואינטראקציה", true);
+        JCheckBox animations = new JCheckBox("אנימציות משחק וקובייה", true);
         animations.setOpaque(false);
         animations.setFont(Theme.font(13, false));
         animations.addActionListener(e -> {
-            canvas.setAnimationsEnabled(animations.isSelected());
+            animationsEnabled = animations.isSelected();
+            canvas.setAnimationsEnabled(animationsEnabled);
+            if (!animationsEnabled) die.finishRollAnimation();
             updateRollButton();
         });
         info.add(animations);
@@ -83,7 +86,7 @@ public final class GameBoardView extends JPanel implements GameListener {
         dieRow.add(die, BorderLayout.LINE_START);
         dieRow.add(rollInfo, BorderLayout.CENTER);
         dice.add(dieRow, BorderLayout.NORTH);
-        rollButton.addActionListener(e -> onRoll.run());
+        rollButton.addActionListener(e -> startVisualRoll(onRoll));
         dice.add(rollButton, BorderLayout.CENTER);
         rollButton.setPreferredSize(new Dimension(260, 44));
         status.setForeground(Theme.MUTED);
@@ -198,7 +201,8 @@ public final class GameBoardView extends JPanel implements GameListener {
     private void updateRollButton() {
         rollButton.setEnabled(displayedState != null
                 && displayedState.phase() == GameState.Phase.WAITING_FOR_ROLL
-                && !canvas.isBusy());
+                && !canvas.isBusy() && !die.isRolling());
+        rollButton.setText(die.isRolling() ? "הקובייה מתגלגלת..." : "הטלת קובייה");
     }
 
     /** After the last animated piece finishes, the Controller can show the results. */
@@ -209,6 +213,7 @@ public final class GameBoardView extends JPanel implements GameListener {
     /** Called by the Controller when the game ends or the player leaves the screen. */
     public void stopClock() {
         clockTimer.stop();
+        die.cancelRollAnimation();
         canvas.stopEffects();
     }
 }

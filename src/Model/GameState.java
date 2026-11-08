@@ -17,6 +17,7 @@ public final class GameState {
     private int currentPlayerIndex;
     private int consecutiveSixes;
     private DiceRoll lastRoll;
+    private DiceRoll latestRoll;
     private Phase phase = Phase.WAITING_FOR_ROLL;
     private List<Move> legalMoves = List.of();
     private final Deque<String> log = new ArrayDeque<>();
@@ -51,6 +52,8 @@ public final class GameState {
     public int consecutiveSixes() { return consecutiveSixes; }
     /** The most recent roll, kept after the turn passes so the die stays visible; null before the first roll. */
     public DiceRoll lastRoll() { return lastRoll; }
+    /** Return the latest real die result, including after the turn changes. */
+    public DiceRoll latestRoll() { return latestRoll; }
     /** Return the current phase of the game turn. */
     public Phase phase() { return phase; }
     /** Return the immutable set of currently available moves. */
@@ -96,8 +99,11 @@ public final class GameState {
     void setCurrentPlayerIndex(int index) { this.currentPlayerIndex = index; }
     /** Update the current six-roll streak. */
     void setConsecutiveSixes(int count) { this.consecutiveSixes = count; }
-    /** Record the most recent accepted die result. */
-    void setLastRoll(DiceRoll roll) { this.lastRoll = roll; }
+    /** Update the active turn roll and remember real results for display. */
+    void setLastRoll(DiceRoll roll) {
+        this.lastRoll = roll;
+        if (roll != null) this.latestRoll = roll;
+    }
     /** Change the active phase of the game. */
     void setPhase(Phase phase) { this.phase = phase; }
     /** Store an immutable copy of the current legal moves. */
