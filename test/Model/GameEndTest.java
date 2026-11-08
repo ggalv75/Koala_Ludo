@@ -3,6 +3,7 @@ package Model;
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
@@ -100,5 +101,81 @@ class GameEndTest {
 
         engine.rollDice(); // Dor rolls 2 with no piece out: the turn passes over Gal to Omer
         assertEquals(2, state.currentPlayerIndex());
+    }
+
+    /** Gal has three pieces home and the fourth {@code stepsBefore} squares before the finish. */
+    private static GameEngine galNearFinish(int players, TestSupport.ManualClock time, int stepsBefore,
+                                            Integer... dieValues) {
+        GameEngine engine = TestSupport.newEngine(players, time, dieValues);
+        GameState state = engine.state();
+        int finish = state.board().finishStep();
+        List<Piece> galsPieces = state.piecesOf(state.players().get(0));
+        for (int i = 0; i < 3; i++) galsPieces.get(i).moveTo(finish);
+        galsPieces.get(3).moveTo(finish - stepsBefore);
+        return engine;
+    }
+
+    @Test
+    @DisplayName("FR-46: finishing with a six in a 3-player game gives no extra roll")
+    void finishingWithSixGivesNoExtraRoll() {
+        GameEngine engine = galNearFinish(3, new TestSupport.ManualClock(), 6, 6);
+        engine.rollDice();
+        assertTrue(engine.movePiece(3));
+
+        GameState state = engine.state();
+        assertEquals(1, state.players().get(0).rank());
+        assertEquals(1, state.currentPlayerIndex(), "The turn passes despite the six");
+        assertEquals(0, state.consecutiveSixes());
+        assertEquals(GameState.Phase.WAITING_FOR_ROLL, state.phase());
+    }
+
+    @Test
+    @DisplayName("FR-45, FR-46: the first finisher of 3 is announced once and the game is not over")
+    void firstFinisherIsAnnouncedButGameGoesOn() {
+        GameEngine engine = galNearFinish(3, new TestSupport.ManualClock(), 1, 1);
+        List<PlayerFinishEvent> finished = new ArrayList<>();
+        List<GameResult> results = new ArrayList<>();
+        engine.addListener(new GameListener() {
+            @Override public void onPlayerFinished(PlayerFinishEvent event) { finished.add(event); }
+            @Override public void onGameOver(GameResult result) { results.add(result); }
+        });
+
+        engine.rollDice();
+        engine.movePiece(3);
+
+        assertEquals(1, finished.size());
+        assertEquals("Gal", finished.get(0).playerName());
+        assertEquals(1, finished.get(0).rank());
+        assertTrue(results.isEmpty(), "No game over with two players still playing");
+        assertTrue(engine.state().result() == null, "No result before the game ends");
+    }
+
+    @Test
+    @DisplayName("FR-48: the result records the local date and time the game ended")
+    void resultRecordsEndTime() {
+        TestSupport.ManualClock time = new TestSupport.ManualClock(); // 2026-11-15 10:00 UTC = 12:00 Israel
+        GameEngine engine = galNearFinish(2, time, 1, 1);
+        time.advance(Duration.ofSeconds(3725));
+        engine.rollDice();
+        engine.movePiece(3);
+
+        assertEquals(LocalDateTime.of(2026, 11, 15, 13, 2, 5), engine.state().result().endedAt());
+    }
+
+    @Test
+    @DisplayName("FR-46: pieces in the finish area are off the board and cannot block or be captured")
+    void finishedPiecesAreOffTheBoard() {
+        GameEngine engine = TestSupport.newEngine(2);
+        GameState state = engine.state();
+        Player gal = state.players().get(0);
+        TestSupport.bringAllPiecesHome(state, gal);
+
+        for (Piece piece : state.piecesOf(gal)) {
+            assertTrue(state.positionOf(piece) == null, "A finished piece has no square");
+        }
+        for (Position square : state.board().cells().keySet()) {
+            assertFalse(InteractionRules.blockOwners(state, square).contains(gal.index()),
+                    "Gal's finished pieces form no block at " + square);
+        }
     }
 }

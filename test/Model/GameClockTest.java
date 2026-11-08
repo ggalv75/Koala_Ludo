@@ -59,4 +59,13 @@ class GameClockTest {
 
         assertEquals(10, clock.elapsedSeconds());
     }
+
+    @Test
+    @DisplayName("FR-48 boundary values: the last second of a minute, an hour and a full day")
+    void formatsBoundaryValues() {
+        assertEquals("00:00:01", GameClock.format(1));
+        assertEquals("00:59:59", GameClock.format(3599));
+        assertEquals("01:00:00", GameClock.format(3600));
+        assertEquals("24:00:00", GameClock.format(86_400));
+    }
 }

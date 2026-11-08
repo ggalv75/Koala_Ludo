@@ -163,4 +163,33 @@ class TurnManagerTest {
         assertTrue(state.legalMoves().isEmpty());
         assertEquals(SIX, state.lastRoll(), "The die keeps showing the last roll");
     }
+
+    @Test
+    @DisplayName("FR-19 decision table: a second six with no legal move still gives another roll")
+    void secondSixWithoutLegalMoveRollsAgain() {
+        GameState state = TestSupport.newState(2);
+        TurnManager.afterRoll(state, SIX, false);
+        assertEquals(TurnManager.RollOutcome.ROLL_AGAIN, TurnManager.afterRoll(state, SIX, false));
+        assertEquals(2, state.consecutiveSixes());
+    }
+
+    @Test
+    @DisplayName("FR-18, FR-20: after two sixes, a non-six with no legal move passes the turn and resets the streak")
+    void nonSixAfterTwoSixesWithoutMovePassesTurn() {
+        GameState state = TestSupport.newState(2);
+        TurnManager.afterRoll(state, SIX, true);
+        TurnManager.afterRoll(state, SIX, true);
+        assertEquals(TurnManager.RollOutcome.PASS_TURN, TurnManager.afterRoll(state, THREE, false));
+        assertEquals(0, state.consecutiveSixes());
+    }
+
+    @Test
+    @DisplayName("FR-46: a finished last player is skipped when the turn wraps around to the first")
+    void finishedPlayerIsSkippedAcrossWrapAround() {
+        GameState state = TestSupport.newState(4);
+        state.players().get(3).assignRank(1, true);
+        state.setCurrentPlayerIndex(2);
+        TurnManager.passTurn(state);
+        assertEquals(0, state.currentPlayerIndex());
+    }
 }
