@@ -79,7 +79,10 @@ class GameBoardViewTest {
             assertTrue(texts.contains("דור  |  בבית: 0/4"));
             assertTrue(texts.contains("גל  |  בבית: 0/4"));
 
-            assertTrue(findButton("הטלת קובייה").isEnabled());
+            JButton rollButton = findButton("roll-button");
+
+            assertEquals("הטלת קובייה", rollButton.getText());
+            assertTrue(rollButton.isEnabled());
 
             assertEquals(0, rollCalls);
             assertEquals(0, exitCalls);
@@ -110,13 +113,26 @@ class GameBoardViewTest {
     @Test
     void rollButtonInvokesOnlyRollAction() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
-            JButton rollButton = findButton("הטלת קובייה");
+            JButton rollButton = findButton("roll-button");
 
             assertTrue(rollButton.isEnabled());
 
             rollButton.doClick(0);
 
-            assertEquals(1, rollCalls);
+            // The real roll is requested only after the die animation ends.
+            assertEquals(0, rollCalls,
+                    "ההטלה נשלחת רק בסוף אנימציית הקובייה");
+            assertFalse(rollButton.isEnabled(),
+                    "הכפתור חסום בזמן שהקובייה מתגלגלת");
+
+            rollButton.doClick(0);
+        });
+
+        awaitRollCalls(1);
+
+        SwingUtilities.invokeAndWait(() -> {
+            assertEquals(1, rollCalls,
+                    "לחיצה כפולה בזמן אנימציה מפעילה הטלה אחת בלבד");
             assertEquals(0, exitCalls);
             assertEquals(0, pieceClickCalls);
         });
@@ -126,7 +142,7 @@ class GameBoardViewTest {
     void exitButtonInvokesOnlyExitAction() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
             JButton exitButton =
-                    findButton("יציאה למסך הפתיחה");
+                    findButton("board-exit");
 
             assertTrue(exitButton.isEnabled());
 
@@ -208,17 +224,35 @@ class GameBoardViewTest {
                 .toList();
     }
 
-    private JButton findButton(String text) {
+    private JButton findButton(String name) {
         List<JButton> matches =
                 findComponents(view, JButton.class)
                         .stream()
-                        .filter(button -> text.equals(button.getText()))
+                        .filter(button -> name.equals(button.getName()))
                         .toList();
 
         assertEquals(1, matches.size(),
-                "צריך להימצא כפתור אחד עם הטקסט " + text);
+                "צריך להימצא כפתור אחד עם המזהה " + name);
 
         return matches.get(0);
+    }
+
+    /** Polls on the EDT until the animated roll reaches the Controller. */
+    private void awaitRollCalls(int expected) throws Exception {
+        long deadline = System.currentTimeMillis() + 5000;
+        int[] current = new int[1];
+
+        do {
+            SwingUtilities.invokeAndWait(() -> current[0] = rollCalls);
+
+            if (current[0] >= expected) {
+                return;
+            }
+
+            Thread.sleep(20);
+        } while (System.currentTimeMillis() < deadline);
+
+        fail("ההטלה לא נשלחה בתוך חמש שניות");
     }
 
     private <T extends Component> List<T> findComponents(

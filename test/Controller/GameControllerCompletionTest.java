@@ -15,8 +15,7 @@ import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
-import javax.swing.JButton;
-import javax.swing.JComboBox;
+import javax.swing.AbstractButton;
 import javax.swing.JDialog;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
@@ -30,12 +29,12 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import Model.ControllerTestFixtures;
-import Model.Difficulty;
 import Model.GameEngine;
 import Model.GameListener;
 import Model.GameState;
 import Model.PlayerColor;
 import View.GameBoardView;
+import View.GameSetupView;
 import View.ResultsView;
 
 import java.io.ByteArrayOutputStream;
@@ -148,7 +147,7 @@ class GameControllerCompletionTest {
 
             assertTrue(labels.contains(
                     "מקום 2:  שחקן 2"));
-            clickButton("חזרה למסך הפתיחה");
+            clickButton("results-main-menu");
 
             assertInstanceOf(
                     View.MainMenuView.class,
@@ -187,9 +186,13 @@ class GameControllerCompletionTest {
 
                     engine.addListener(failingListener);
 
+                    // Roll immediately: with animations on, the roll would
+                    // fire after this listener has already been removed.
+                    clickButton("animations-toggle");
+
                     try {
                         startDialogResponder();
-                        clickButton("הטלת קובייה");
+                        clickButton("roll-button");
                     } finally {
                         engine.removeListener(failingListener);
                     }
@@ -232,47 +235,23 @@ class GameControllerCompletionTest {
         }
     }
     private void startTwoPlayerGame() {
-        clickButton("משחק חדש");
+        clickButton("menu-new-game");
 
-        Container setup = frame.getContentPane();
+        assertInstanceOf(GameSetupView.class, frame.getContentPane());
 
-        List<JTextField> names =
-                findComponents(setup, JTextField.class);
-
-        assertTrue(names.size() >= 2);
-
-        names.get(0).setText("שחקן 1");
-        names.get(1).setText("שחקן 2");
-
-        List<JComboBox<?>> colors = new ArrayList<>();
-
-        for (Component component :
-                findComponents(setup, Component.class)) {
-
-            if (component instanceof JComboBox<?> box
-                    && box.getItemCount() > 0) {
-
-                Object firstItem = box.getItemAt(0);
-
-                if (firstItem instanceof Integer) {
-                    box.setSelectedItem(2);
-                } else if (firstItem instanceof Difficulty) {
-                    box.setSelectedItem(Difficulty.EASY);
-                } else if (box.getItemCount() > 1
-                        && box.getItemAt(1) instanceof PlayerColor) {
-                    colors.add(box);
-                }
-            }
-        }
-
-        assertTrue(colors.size() >= 2);
+        clickButton("player-count-2");
 
         PlayerColor[] availableColors = PlayerColor.values();
 
-        colors.get(0).setSelectedItem(availableColors[0]);
-        colors.get(1).setSelectedItem(availableColors[1]);
+        for (int i = 0; i < 2; i++) {
+            findNamed(JTextField.class, "player-name-" + i)
+                    .setText("שחקן " + (i + 1));
 
-        clickButton("התחלת משחק");
+            clickButton("player-color-" + i + "-"
+                    + availableColors[i].name());
+        }
+
+        clickButton("setup-start");
 
         assertInstanceOf(
                 GameBoardView.class,
@@ -355,20 +334,28 @@ class GameControllerCompletionTest {
         assertNull(dialogProblem, dialogProblem);
     }
 
-    private void clickButton(String text) {
-        List<JButton> buttons =
-                findComponents(
-                        frame.getContentPane(), JButton.class)
+    private void clickButton(String name) {
+        AbstractButton button = findNamed(AbstractButton.class, name);
+
+        assertTrue(button.isEnabled(),
+                "הכפתור צריך להיות פעיל " + name);
+
+        button.doClick(0);
+    }
+
+    /** Finds exactly one component by its stable name, not its visible text. */
+    private <T extends Component> T findNamed(Class<T> type, String name) {
+        List<T> matches =
+                findComponents(frame.getContentPane(), type)
                         .stream()
-                        .filter(button ->
-                                text.equals(button.getText()))
+                        .filter(component ->
+                                name.equals(component.getName()))
                         .toList();
 
-        assertEquals(1, buttons.size(),
-                "צריך להימצא כפתור אחד עם הטקסט " + text);
+        assertEquals(1, matches.size(),
+                "צריך להימצא רכיב אחד עם המזהה " + name);
 
-        assertTrue(buttons.get(0).isEnabled());
-        buttons.get(0).doClick(0);
+        return matches.get(0);
     }
 
     private <T extends Component> List<T> findComponents(

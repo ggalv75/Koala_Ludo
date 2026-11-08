@@ -12,10 +12,10 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 
-import javax.swing.JButton;
-import javax.swing.JComboBox;
+import javax.swing.AbstractButton;
 import javax.swing.JDialog;
 import javax.swing.JFrame;
+import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
@@ -25,8 +25,6 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-
-import Model.Difficulty;
 import Model.PlayerColor;
 import View.GameBoardView;
 import View.GameSetupView;
@@ -87,45 +85,53 @@ class GameControllerIntegrationTest {
     @Test
     void opensSetupAndReturnsToMainMenu() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
-            clickButton("משחק חדש");
+            clickButton("menu-new-game");
 
             assertInstanceOf(GameSetupView.class,
                     frame.getContentPane());
 
-            clickButton("חזרה");
+            clickButton("setup-back");
 
             assertInstanceOf(MainMenuView.class,
                     frame.getContentPane());
         });
     }
 
-    /** Verify all supported player counts. */
+    /** FR-05: a game starts for every supported player count (2-4). */
     @Test
-    void testPlayerCount() {
-        for (int count : new int[]{2, 3, 4}) {
-            assertTrue(count >= 2 && count <= 4);
+    void startsGameForSupportedPlayerCounts() throws Exception {
+        for (int playerCount = 2; playerCount <= 4; playerCount++) {
+            final int count = playerCount;
+
+            SwingUtilities.invokeAndWait(() -> {
+                openAndFillSetup(count);
+
+                clickButton("setup-start");
+
+                assertInstanceOf(
+                        GameBoardView.class,
+                        frame.getContentPane(),
+                        "המשחק צריך להתחיל עבור " + count + " שחקנים"
+                );
+
+                assertTrue(findNamed(AbstractButton.class,
+                                "roll-button").isEnabled(),
+                        "משחק חדש צריך לאפשר הטלה ראשונה");
+
+                clickAndAnswerDialog(
+                        "board-exit",
+                        "יציאה מהמשחק",
+                        JOptionPane.YES_OPTION
+                );
+
+                assertInstanceOf(MainMenuView.class,
+                        frame.getContentPane());
+            });
         }
     }
-    void startsGameForSupportedPlayerCounts(int playerCount)
-            throws Exception {
-
-        SwingUtilities.invokeAndWait(() -> {
-            openAndFillSetup(playerCount);
-
-            clickButton("התחלת משחק");
-
-            assertInstanceOf(GameBoardView.class,
-                    frame.getContentPane());
-
-            JButton rollButton = findButton("הטלת קובייה");
-
-            assertTrue(rollButton.isEnabled(),
-                    "משחק חדש צריך לאפשר הטלה ראשונה");
-        });
-    }
 
     @Test
-    void missingNameShowsWarningAndKeepsSetupScreen()
+    void missingNameShowsInlineErrorAndKeepsSetupScreen()
             throws Exception {
 
         SwingUtilities.invokeAndWait(() -> {
@@ -136,24 +142,19 @@ class GameControllerIntegrationTest {
                     frame.getContentPane()
             );
 
-            List<JTextField> names =
-                    findComponents(setup, JTextField.class);
+            findNamed(JTextField.class, "player-name-0").setText("");
 
-            names.get(0).setText("");
-
-            clickAndAnswerDialog(
-                    "התחלת משחק",
-                    "בדיקת קלט",
-                    JOptionPane.OK_OPTION
-            );
+            clickButton("setup-start");
 
             assertSame(setup, frame.getContentPane(),
                     "קלט שגוי צריך להשאיר את המשתמש בהגדרות");
+
+            assertSetupErrorShown();
         });
     }
 
     @Test
-    void duplicateColorsShowWarningAndKeepSetupScreen()
+    void takenColorCannotBeSelectedByAnotherPlayer()
             throws Exception {
 
         SwingUtilities.invokeAndWait(() -> {
@@ -164,19 +165,33 @@ class GameControllerIntegrationTest {
                     frame.getContentPane()
             );
 
-            List<JComboBox<?>> colors = colorSelectors();
-            colors.get(1).setSelectedItem(
-                    colors.get(0).getSelectedItem()
-            );
+            PlayerColor[] colors = PlayerColor.values();
 
-            clickAndAnswerDialog(
-                    "התחלת משחק",
-                    "בדיקת קלט",
-                    JOptionPane.OK_OPTION
-            );
+            AbstractButton takenColor = findNamed(AbstractButton.class,
+                    colorButtonName(1, colors[0]));
+            AbstractButton ownColor = findNamed(AbstractButton.class,
+                    colorButtonName(1, colors[1]));
+
+            assertFalse(takenColor.isEnabled(),
+                    "צבע של שחקן אחר צריך להיות חסום");
+
+            takenColor.doClick(0);
+
+            assertFalse(takenColor.isSelected(),
+                    "לחיצה על צבע תפוס לא משנה את הבחירה");
+            assertTrue(ownColor.isSelected(),
+                    "הצבע הקודם של השחקן נשמר");
+
+            // Deselect player 2's color: starting without a color must fail.
+            ownColor.doClick(0);
+            assertFalse(ownColor.isSelected());
+
+            clickButton("setup-start");
 
             assertSame(setup, frame.getContentPane(),
-                    "צבעים כפולים צריכים למנוע התחלת משחק");
+                    "שחקן בלי צבע לא יכול להתחיל משחק");
+
+            assertSetupErrorShown();
         });
     }
 
@@ -186,7 +201,7 @@ class GameControllerIntegrationTest {
 
         SwingUtilities.invokeAndWait(() -> {
             openAndFillSetup(2);
-            clickButton("התחלת משחק");
+            clickButton("setup-start");
 
             GameBoardView boardView = assertInstanceOf(
                     GameBoardView.class,
@@ -194,7 +209,7 @@ class GameControllerIntegrationTest {
             );
 
             clickAndAnswerDialog(
-                    "יציאה למסך הפתיחה",
+                    "board-exit",
                     "יציאה מהמשחק",
                     JOptionPane.NO_OPTION
             );
@@ -203,7 +218,7 @@ class GameControllerIntegrationTest {
                     "ביטול היציאה צריך להשאיר את המשחק פתוח");
 
             clickAndAnswerDialog(
-                    "יציאה למסך הפתיחה",
+                    "board-exit",
                     "יציאה מהמשחק",
                     JOptionPane.YES_OPTION
             );
@@ -222,7 +237,7 @@ class GameControllerIntegrationTest {
             );
 
             clickAndAnswerDialog(
-                    "חוקי המשחק",
+                    "menu-rules",
                     "חוקי המשחק - רמה קלה",
                     JOptionPane.OK_OPTION
             );
@@ -231,96 +246,63 @@ class GameControllerIntegrationTest {
         });
     }
 
+    /** Opens the setup screen and fills valid names and unique colors. */
     private void openAndFillSetup(int playerCount) {
-        clickButton("משחק חדש");
+        clickButton("menu-new-game");
 
-        GameSetupView setup = assertInstanceOf(
-                GameSetupView.class,
-                frame.getContentPane()
-        );
+        assertInstanceOf(GameSetupView.class, frame.getContentPane());
 
-        List<JComboBox<?>> selectors = comboBoxes(setup);
+        clickButton("player-count-" + playerCount);
 
-        JComboBox<?> countSelector = selectors.stream()
-                .filter(box -> box.getItemCount() > 0
-                        && box.getItemAt(0) instanceof Integer)
-                .findFirst()
-                .orElseThrow(() ->
-                        new AssertionError("לא נמצא מספר השחקנים"));
-
-        countSelector.setSelectedItem(playerCount);
-
-        JComboBox<?> difficultySelector = selectors.stream()
-                .filter(box -> box.getItemCount() > 0
-                        && box.getItemAt(0) instanceof Difficulty)
-                .findFirst()
-                .orElseThrow(() ->
-                        new AssertionError("לא נמצאה רמת הקושי"));
-
-        difficultySelector.setSelectedItem(Difficulty.EASY);
-
-        List<JTextField> names =
-                findComponents(setup, JTextField.class);
-
-        List<JComboBox<?>> colors = colorSelectors();
         PlayerColor[] availableColors = PlayerColor.values();
 
-        assertTrue(names.size() >= playerCount);
-        assertTrue(colors.size() >= playerCount);
-
         for (int i = 0; i < playerCount; i++) {
-            names.get(i).setText("שחקן " + (i + 1));
-            colors.get(i).setSelectedItem(availableColors[i]);
+            findNamed(JTextField.class, "player-name-" + i)
+                    .setText("שחקן " + (i + 1));
+
+            clickButton(colorButtonName(i, availableColors[i]));
         }
     }
 
-    private List<JComboBox<?>> colorSelectors() {
-        return comboBoxes(frame.getContentPane())
-                .stream()
-                .filter(box -> box.getItemCount() > 1
-                        && box.getItemAt(1) instanceof PlayerColor)
-                .toList();
+    private static String colorButtonName(int player, PlayerColor color) {
+        return "player-color-" + player + "-" + color.name();
     }
 
-    private List<JComboBox<?>> comboBoxes(Container root) {
-        List<JComboBox<?>> result = new ArrayList<>();
+    private void assertSetupErrorShown() {
+        JLabel error = findNamed(JLabel.class, "setup-error");
 
-        for (Component component : findComponents(
-                root, Component.class)) {
-            if (component instanceof JComboBox<?> comboBox) {
-                result.add(comboBox);
-            }
-        }
-
-        return result;
+        assertTrue(error.isVisible(),
+                "הודעת השגיאה צריכה להופיע במסך ההגדרות");
+        assertFalse(error.getText().isBlank(),
+                "הודעת השגיאה צריכה להסביר מה חסר");
     }
 
-    private void clickButton(String text) {
-        JButton button = findButton(text);
+    private void clickButton(String name) {
+        AbstractButton button = findNamed(AbstractButton.class, name);
 
         assertTrue(button.isEnabled(),
-                "הכפתור צריך להיות פעיל " + text);
+                "הכפתור צריך להיות פעיל " + name);
 
         button.doClick(0);
     }
 
-    private JButton findButton(String text) {
-        List<JButton> matches =
-                findComponents(
-                        frame.getContentPane(), JButton.class)
+    /** Finds exactly one component by its stable name, not its visible text. */
+    private <T extends Component> T findNamed(Class<T> type, String name) {
+        List<T> matches =
+                findComponents(frame.getContentPane(), type)
                         .stream()
-                        .filter(button ->
-                                text.equals(button.getText()))
+                        .filter(component ->
+                                name.equals(component.getName()))
                         .toList();
 
         assertEquals(1, matches.size(),
-                "צריך להימצא כפתור אחד עם הטקסט " + text);
+                "צריך להימצא רכיב אחד עם המזהה " + name);
 
         return matches.get(0);
     }
 
     private void clickAndAnswerDialog(
-            String buttonText,
+            String buttonName,
             String expectedTitle,
             int answer) {
 
@@ -358,7 +340,7 @@ class GameControllerIntegrationTest {
         responder.start();
 
         try {
-            clickButton(buttonText);
+            clickButton(buttonName);
         } finally {
             responder.stop();
         }

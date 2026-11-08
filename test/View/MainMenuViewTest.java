@@ -14,32 +14,32 @@ class MainMenuViewTest {
 
     @Test
     void newGameButtonInvokesOnlyNewGameAction() throws Exception {
-        assertNavigationAction("משחק חדש", 0);
+        assertNavigationAction("menu-new-game", 0);
     }
 
     @Test
     void rulesButtonInvokesOnlyRulesAction() throws Exception {
-        assertNavigationAction("חוקי המשחק", 1);
+        assertNavigationAction("menu-rules", 1);
     }
 
     @Test
     void exitButtonInvokesOnlyExitAction() throws Exception {
-        assertNavigationAction("יציאה", 2);
+        assertNavigationAction("menu-exit", 2);
     }
 
     @Test
     void historyButtonIsDisabledInIterationOne() throws Exception {
-        assertUnavailableButton("היסטוריית משחקים (באיטרציה 3)");
+        assertUnavailableButton("menu-history");
     }
 
     @Test
     void questionManagementButtonIsDisabledInIterationOne()
             throws Exception {
-        assertUnavailableButton("ניהול שאלות (באיטרציה 3)");
+        assertUnavailableButton("menu-questions");
     }
 
     private void assertNavigationAction(
-            String buttonText, int expectedAction) throws Exception {
+            String buttonName, int expectedAction) throws Exception {
 
         SwingUtilities.invokeAndWait(() -> {
             int[] calls = new int[3];
@@ -50,7 +50,7 @@ class MainMenuViewTest {
                     () -> calls[2]++
             );
 
-            JButton button = findButton(menu, buttonText);
+            JButton button = findButton(menu, buttonName);
 
             assertTrue(button.isEnabled(),
                     "כפתור הניווט צריך להיות פעיל");
@@ -68,7 +68,7 @@ class MainMenuViewTest {
         });
     }
 
-    private void assertUnavailableButton(String buttonText)
+    private void assertUnavailableButton(String buttonName)
             throws Exception {
 
         SwingUtilities.invokeAndWait(() -> {
@@ -80,7 +80,7 @@ class MainMenuViewTest {
                     () -> calls[2]++
             );
 
-            JButton button = findButton(menu, buttonText);
+            JButton button = findButton(menu, buttonName);
 
             assertFalse(button.isEnabled(),
                     "הכפתור צריך להיות מושבת באיטרציה 1");
@@ -92,23 +92,23 @@ class MainMenuViewTest {
         });
     }
 
-    private JButton findButton(Container container, String text) {
-        JButton button = searchButton(container, text);
+    private JButton findButton(Container container, String name) {
+        JButton button = searchButton(container, name);
 
-        assertNotNull(button, "לא נמצא כפתור עם הטקסט " + text);
+        assertNotNull(button, "לא נמצא כפתור עם המזהה " + name);
 
         return button;
     }
 
-    private JButton searchButton(Container container, String text) {
+    private JButton searchButton(Container container, String name) {
         for (Component component : container.getComponents()) {
             if (component instanceof JButton button
-                    && text.equals(button.getText())) {
+                    && name.equals(button.getName())) {
                 return button;
             }
 
             if (component instanceof Container childContainer) {
-                JButton found = searchButton(childContainer, text);
+                JButton found = searchButton(childContainer, name);
 
                 if (found != null) {
                     return found;
