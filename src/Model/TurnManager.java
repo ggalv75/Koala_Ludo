@@ -39,7 +39,10 @@ public final class TurnManager {
         return roll.isSix() && !player.isFinished();
     }
 
-    /** Pass the turn to the next unfinished player and clear only the active roll. */
+    /**
+     * FR-18, FR-46: the turn passes to the next player in order who has not finished.
+     * Only the active roll is cleared; the die keeps showing {@link GameState#latestRoll()}.
+     */
     static void passTurn(GameState state) {
         List<Player> players = state.players();
         int next = state.currentPlayerIndex();

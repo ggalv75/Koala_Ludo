@@ -9,7 +9,10 @@ public final class RankingManager {
     /** Prevent instantiation of the ranking rules helper. */
     private RankingManager() { }
 
-    /** Assign the next available rank when all four pieces finish; report if ranked. */
+    /**
+     * FR-45: when all four pieces of the player are home, the player gets the next free place.
+     * Returns true if the player was ranked by this call.
+     */
     static boolean rankIfAllPiecesHome(GameState state, Player player) {
         boolean allHome = state.finishedPieceCount(player) == GameRules.PIECES_PER_PLAYER;
         if (player.isFinished() || !allHome) return false;
