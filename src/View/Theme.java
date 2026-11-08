@@ -69,6 +69,26 @@ public final class Theme {
             case BLUE -> new Color(225, 240, 253);
         };
     }
+    
+	/** Stronger background colors for home paths and finish triangles. */
+    public static Color boardPathColorOf(PlayerColor color) {
+        return switch (color) {
+            case RED -> new Color(239, 105, 98);
+            case GREEN -> new Color(104, 190, 115);
+            case YELLOW -> new Color(247, 205, 65);
+            case BLUE -> new Color(90, 165, 235);
+        };
+    }
+	
+	/** Strong, high-contrast colors for board arrows. */
+	public static Color boardArrowColorOf(PlayerColor color) {
+	    return switch (color) {
+	        case RED -> new Color(190, 25, 25);
+	        case GREEN -> new Color(20, 125, 45);
+	        case YELLOW -> new Color(165, 115, 0);
+	        case BLUE -> new Color(15, 90, 190);
+	    };
+	}
 
     /** Create a theme-consistent text label. */
     public static JLabel label(String text, int size, boolean bold) {

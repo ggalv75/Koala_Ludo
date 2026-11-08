@@ -284,11 +284,13 @@ public final class BoardCanvas extends JPanel {
     /** Paint one board cell according to its semantic type. */
     private void drawCell(Graphics2D g, Position position, Cell c) {
         Rectangle r = rect(position);
-        Color fill = switch (c.type()) {
-            case START, ARROW, HOME -> Theme.softColorOf(c.color());
-            case SAFE -> Theme.SAFE_SOFT;
-            case REGULAR -> Theme.SURFACE;
-        };
+
+		Color fill = switch (c.type()) {
+		    case START, HOME -> Theme.boardPathColorOf(c.color());
+		    case SAFE -> Theme.SAFE_SOFT;
+		    case ARROW, REGULAR -> Theme.SURFACE;
+		};
+
         g.setColor(fill);
         g.fillRect(r.x, r.y, r.width, r.height);
         g.setColor(Theme.BORDER);
@@ -297,7 +299,7 @@ public final class BoardCanvas extends JPanel {
         int cx = r.x + r.width / 2;
         int cy = r.y + r.height / 2;
         switch (c.type()) {
-            case START -> drawText(g, "#", cx, cy, Theme.colorOf(c.color()), (int) (cell * 0.6));
+        	case START -> drawText(g, "#", cx, cy, Color.WHITE, (int) (cell * 0.7));
             case SAFE -> {
                 g.setColor(Theme.SAFE);
                 g.fill(star(cx, cy, cell * 0.38, cell * 0.16));
@@ -337,28 +339,30 @@ public final class BoardCanvas extends JPanel {
         }
     }
 
-    /** Paint the four finishing triangles. */
-    private void drawCenter(Graphics2D g, Board board) {
-        Rectangle r = rect(board.centerCorner());
-        int d = cell * 3;
-        int x = r.x;
-        int y = r.y;
-        int mx = x + d / 2;
-        int my = y + d / 2;
-        fillTriangle(g, PlayerColor.RED, new int[]{x, x, mx}, new int[]{y, y + d, my});
-        fillTriangle(g, PlayerColor.GREEN, new int[]{x, x + d, mx}, new int[]{y, y, my});
-        fillTriangle(g, PlayerColor.YELLOW, new int[]{x + d, x + d, mx}, new int[]{y, y + d, my});
-        fillTriangle(g, PlayerColor.BLUE, new int[]{x, x + d, mx}, new int[]{y + d, y + d, my});
-        g.setColor(Theme.BORDER);
-        g.setStroke(new BasicStroke(1f));
-        g.drawRect(x, y, d, d);
-    }
+	/** Paint the four finishing triangles according to the Easy board layout. */
+	private void drawCenter(Graphics2D g, Board board) {
+	    Rectangle r = rect(board.centerCorner());
+	    int d = cell * 3;
+	    int x = r.x;
+	    int y = r.y;
+	    int mx = x + d / 2;
+	    int my = y + d / 2;
+	
+	    fillTriangle(g, PlayerColor.GREEN, new int[]{x, x, mx}, new int[]{y, y + d, my});
+	    fillTriangle(g, PlayerColor.YELLOW, new int[]{x, x + d, mx}, new int[]{y, y, my});
+	    fillTriangle(g, PlayerColor.BLUE, new int[]{x + d, x + d, mx}, new int[]{y, y + d, my});
+	    fillTriangle(g, PlayerColor.RED, new int[]{x, x + d, mx}, new int[]{y + d, y + d, my});
+	
+	    g.setColor(Theme.BORDER);
+	    g.setStroke(new BasicStroke(1f));
+	    g.drawRect(x, y, d, d);
+	}
 
     /** Fill one finishing triangle with a player color. */
-    private void fillTriangle(Graphics2D g, PlayerColor color, int[] xs, int[] ys) {
-        g.setColor(Theme.softColorOf(color));
-        g.fillPolygon(xs, ys, 3);
-    }
+	private void fillTriangle(Graphics2D g, PlayerColor color, int[] xs, int[] ys) {
+	    g.setColor(Theme.boardPathColorOf(color));
+	    g.fillPolygon(xs, ys, 3);
+	}
 
     /** Paint visible pieces, respecting temporary animation sprites. */
     private void drawPieces(Graphics2D g, Board board) {
@@ -459,20 +463,21 @@ public final class BoardCanvas extends JPanel {
                 r.height + margin * 2, 12, 12);
     }
 
-    /** Pieces that finished are drawn inside their colour's triangle in the centre. */
-    private Point finishSpot(Board board, PlayerColor color, int k) {
-        Rectangle r = rect(board.centerCorner());
-        double cx = r.x + cell * 1.5;
-        double cy = r.y + cell * 1.5;
-        double offset = cell * 0.85;
-        double along = (k - 1.5) * cell * 0.38;
-        return switch (color) {
-            case RED -> new Point((int) (cx - offset), (int) (cy + along));
-            case GREEN -> new Point((int) (cx + along), (int) (cy - offset));
-            case YELLOW -> new Point((int) (cx + offset), (int) (cy + along));
-            case BLUE -> new Point((int) (cx + along), (int) (cy + offset));
-        };
-    }
+	/** Position finished pieces inside their matching colored triangle. */
+	private Point finishSpot(Board board, PlayerColor color, int k) {
+	    Rectangle r = rect(board.centerCorner());
+	    double cx = r.x + cell * 1.5;
+	    double cy = r.y + cell * 1.5;
+	    double offset = cell * 0.85;
+	    double along = (k - 1.5) * cell * 0.38;
+	
+	    return switch (color) {
+	        case GREEN -> new Point((int) (cx - offset), (int) (cy + along));
+	        case YELLOW -> new Point((int) (cx + along), (int) (cy - offset));
+	        case BLUE -> new Point((int) (cx + offset), (int) (cy + along));
+	        case RED -> new Point((int) (cx + along), (int) (cy + offset));
+	    };
+	}
 
     /** Paint a numbered koala piece with its pulsing legal-move highlight. */
     private void drawPiece(Graphics2D g, Piece piece, int x, int y, int radius) {
@@ -586,8 +591,7 @@ public final class BoardCanvas extends JPanel {
         if (celebration == null) return;
         Piece piece = state.piece(celebration.pieceId());
         Point center = anchor(board, piece, board.finishStep());
-        double t = Math.min(1.0, Math.max(0.0,
-                (double) (System.nanoTime() - celebration.startedAt()) / CELEBRATION_DURATION_NS));
+        double t = Math.min(1.0, Math.max(0.0, (double) (System.nanoTime() - celebration.startedAt()) / CELEBRATION_DURATION_NS));
         int opacity = (int) Math.round(225 * (1.0 - t));
         Color color = Theme.colorOf(celebration.color());
         g.setColor(alpha(color, opacity));
@@ -608,8 +612,7 @@ public final class BoardCanvas extends JPanel {
     private void drawPlayerFinishCelebration(Graphics2D g, Board board) {
         if (playerFinishFx == null) return;
         PlayerFinishEvent event = playerFinishFx.event();
-        double progress = Math.min(1.0, Math.max(0.0,
-                (double) (System.nanoTime() - playerFinishFx.startedAt()) / PLAYER_FINISH_DURATION_NS));
+        double progress = Math.min(1.0, Math.max(0.0, (double) (System.nanoTime() - playerFinishFx.startedAt()) / PLAYER_FINISH_DURATION_NS));
         double fadeIn = Math.min(1.0, progress / 0.13);
         double fadeOut = Math.min(1.0, (1.0 - progress) / 0.18);
         float visibility = (float) Math.max(0.0, Math.min(fadeIn, fadeOut));
@@ -622,16 +625,13 @@ public final class BoardCanvas extends JPanel {
         layer.setColor(new Color(15, 23, 42, 78));
         layer.fillRoundRect(boardX, boardY, boardSize, boardSize, 18, 18);
         drawConfetti(layer, boardX, boardY, boardSize, progress, event.color());
-        drawFinishBanner(layer, boardX + boardSize / 2, boardY + boardSize / 2,
-                Math.min(boardSize - 28, 490), event, progress);
+        drawFinishBanner(layer, boardX + boardSize / 2, boardY + boardSize / 2, Math.min(boardSize - 28, 490), event, progress);
         layer.dispose();
     }
 
     /** Animate deterministic paper confetti so each animation frame remains flicker-free. */
-    private void drawConfetti(Graphics2D g, int x, int y, int boardSize,
-                              double progress, PlayerColor winnerColor) {
-        Color[] palette = {Theme.colorOf(winnerColor), Theme.HIGHLIGHT,
-                new Color(14, 165, 233), new Color(168, 85, 247), new Color(251, 113, 133)};
+    private void drawConfetti(Graphics2D g, int x, int y, int boardSize, double progress, PlayerColor winnerColor) {
+        Color[] palette = {Theme.colorOf(winnerColor), Theme.HIGHLIGHT, new Color(14, 165, 233), new Color(168, 85, 247), new Color(251, 113, 133)};
         for (int i = 0; i < 64; i++) {
             double horizontal = ((i * 67) % 101) / 101.0;
             double phase = ((i * 41) % 97) / 97.0;
@@ -651,8 +651,7 @@ public final class BoardCanvas extends JPanel {
     }
 
     /** Present the player's name and achieved rank on a centered high-contrast celebration card. */
-    private void drawFinishBanner(Graphics2D g, int centerX, int centerY, int width,
-                                  PlayerFinishEvent event, double progress) {
+    private void drawFinishBanner(Graphics2D g, int centerX, int centerY, int width, PlayerFinishEvent event, double progress) {
         int height = Math.max(130, Math.min(190, (int) (width * 0.40)));
         int lift = (int) Math.round((1 - smoothstep(Math.min(1.0, progress / 0.22))) * 20);
         int x = centerX - width / 2;
@@ -694,31 +693,34 @@ public final class BoardCanvas extends JPanel {
         g.drawString(text, cx - fm.stringWidth(text) / 2, cy + (fm.getAscent() - fm.getDescent()) / 2);
     }
 
-    /** Arrow pointing into the colour's home path (FR-10). */
-    private void drawArrow(Graphics2D g, PlayerColor color, int cx, int cy) {
-        double angle = switch (color) {
-            case RED -> 0;
-            case GREEN -> Math.PI / 2;
-            case YELLOW -> Math.PI;
-            case BLUE -> -Math.PI / 2;
-        };
-        double s = cell * 0.32;
-        Path2D arrow = new Path2D.Double();
-        arrow.moveTo(-s, -s * 0.28);
-        arrow.lineTo(s * 0.2, -s * 0.28);
-        arrow.lineTo(s * 0.2, -s * 0.7);
-        arrow.lineTo(s, 0);
-        arrow.lineTo(s * 0.2, s * 0.7);
-        arrow.lineTo(s * 0.2, s * 0.28);
-        arrow.lineTo(-s, s * 0.28);
-        arrow.closePath();
-        Graphics2D rotated = (Graphics2D) g.create();
-        rotated.translate(cx, cy);
-        rotated.rotate(angle);
-        rotated.setColor(Theme.colorOf(color));
-        rotated.fill(arrow);
-        rotated.dispose();
-    }
+	/** Draw an arrow pointing towards the player's private home path. */
+	private void drawArrow(Graphics2D g, PlayerColor color, int cx, int cy) {
+	    double angle = switch (color) {
+	        case GREEN -> 0;
+	        case YELLOW -> Math.PI / 2;
+	        case BLUE -> Math.PI;
+	        case RED -> -Math.PI / 2;
+	    };
+	
+	    double s = cell * 0.42;
+	    Path2D arrow = new Path2D.Double();
+	
+	    arrow.moveTo(-s, -s * 0.28);
+	    arrow.lineTo(s * 0.2, -s * 0.28);
+	    arrow.lineTo(s * 0.2, -s * 0.7);
+	    arrow.lineTo(s, 0);
+	    arrow.lineTo(s * 0.2, s * 0.7);
+	    arrow.lineTo(s * 0.2, s * 0.28);
+	    arrow.lineTo(-s, s * 0.28);
+	    arrow.closePath();
+	
+	    Graphics2D rotated = (Graphics2D) g.create();
+	    rotated.translate(cx, cy);
+	    rotated.rotate(angle);
+	    rotated.setColor(Theme.boardArrowColorOf(color));
+	    rotated.fill(arrow);
+	    rotated.dispose();
+	}
 
     /** Create the star shape used for protected squares. */
     private static Shape star(double cx, double cy, double outer, double inner) {
