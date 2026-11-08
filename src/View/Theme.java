@@ -6,7 +6,7 @@ import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
 
-/** Shared colours, fonts and small widget factories, so every screen looks the same. */
+/** Shared colors, fonts and small widget factories, so every screen looks the same. */
 public final class Theme {
     public static final Color BACKGROUND = new Color(246, 247, 251);
     public static final Color SURFACE = Color.WHITE;
@@ -18,10 +18,32 @@ public final class Theme {
     public static final Color SAFE_SOFT = new Color(220, 245, 235);
     public static final Color HIGHLIGHT = new Color(251, 191, 36);
 
+    // Shared Koala UI color palette.
+    public static final Color KOALA_PRIMARY = new Color(37, 111, 86);
+    public static final Color KOALA_PRIMARY_DARK = new Color(24, 85, 65);
+    public static final Color KOALA_TEXT = new Color(35, 63, 55);
+    public static final Color KOALA_MUTED = new Color(104, 131, 119);
+    public static final Color KOALA_BACKGROUND = new Color(235, 244, 239);
+    public static final Color KOALA_BORDER = new Color(216, 231, 222);
+    public static final Color KOALA_ROW_BACKGROUND = new Color(246, 249, 247);
+    public static final Color KOALA_ERROR = new Color(175, 49, 49);
+
+    private static final Color KOALA_GRADIENT_START = new Color(235, 247, 239);
+    private static final Color KOALA_GRADIENT_END = new Color(216, 234, 236);
+
     private static final String FONT_FAMILY = Font.DIALOG;
 
     /** Prevent instantiation of the shared Swing theme. */
     private Theme() { }
+    
+
+    /**
+     * Creates the shared Koala background gradient.
+     * Used by the main menu and game setup screens.
+     */
+    public static Paint koalaBackgroundGradient(int width, int height) {
+        return new GradientPaint(0, 0, KOALA_GRADIENT_START, width, height, KOALA_GRADIENT_END);
+    }
 
     /** Build a theme-consistent dialog font at the requested size. */
     public static Font font(int size, boolean bold) {

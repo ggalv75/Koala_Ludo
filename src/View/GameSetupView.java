@@ -29,13 +29,13 @@ public final class GameSetupView extends JPanel {
         void onStart(Difficulty difficulty, List<String> names, List<PlayerColor> colors);
     }
 
-    private static final Color GREEN = new Color(37, 111, 86);
-    private static final Color GREEN_DARK = new Color(24, 85, 65);
-    private static final Color TEXT = new Color(35, 63, 55);
-    private static final Color MUTED = new Color(102, 130, 119);
-    private static final Color ROW_BACKGROUND = new Color(246, 249, 247);
-    private static final Color BORDER = new Color(216, 231, 222);
-    private static final Color ERROR = new Color(175, 49, 49);
+    private static final Color GREEN = Theme.KOALA_PRIMARY;
+    private static final Color GREEN_DARK = Theme.KOALA_PRIMARY_DARK;
+    private static final Color TEXT = Theme.KOALA_TEXT;
+    private static final Color MUTED = Theme.KOALA_MUTED;
+    private static final Color ROW_BACKGROUND = Theme.KOALA_ROW_BACKGROUND;
+    private static final Color BORDER = Theme.KOALA_BORDER;
+    private static final Color ERROR = Theme.KOALA_ERROR;
 
     private final JTextField[] names = new JTextField[GameRules.MAX_PLAYERS];
     private final PlayerColor[] selectedColors = new PlayerColor[GameRules.MAX_PLAYERS];
@@ -567,7 +567,7 @@ public final class GameSetupView extends JPanel {
     protected void paintComponent(Graphics graphics) {
         Graphics2D g = (Graphics2D) graphics.create();
 
-        g.setPaint(new GradientPaint(0, 0, new Color(235, 247, 239), getWidth(), getHeight(), new Color(216, 234, 236)));
+        g.setPaint(Theme.koalaBackgroundGradient(getWidth(), getHeight()));
 
         g.fillRect(0, 0, getWidth(), getHeight());
         g.dispose();
