@@ -151,7 +151,10 @@ public final class GameEngine {
         return new PlayerFinishEvent(player.index(), player.name(), player.color(), player.rank());
     }
 
-    /** End the game, grant an extra roll or pass the turn; return whether play ended. */
+    /**
+     * FR-47, FR-19, FR-46: ends the game, gives another roll after a six (not to a player
+     * who has just finished), or passes the turn. Returns true if the game ended.
+     */
     private boolean endTurnAfterMove(Player player, boolean justFinished) {
         if (justFinished && RankingManager.isGameOver(state)) {
             endGame();
