@@ -14,9 +14,7 @@ import javax.swing.SwingUtilities;
 
 import org.junit.jupiter.api.Test;
 
-
 import Model.Difficulty;
-import Model.GameClock;
 import Model.GameResult;
 import Model.PlayerColor;
 
@@ -43,14 +41,23 @@ class ResultsViewTest {
         });
     }
 
-    /** Verify all supported player counts. */
+    /** FR-47: every player (2-4) gets a ranking row with an avatar. */
     @Test
-    void testPlayerCount() {
-        for (int count : new int[]{2, 3, 4}) {
-            assertTrue(count >= 2 && count <= 4);
+    void displaysEveryPlayerWithAnAvatar() throws Exception {
+        for (int playerCount = 2; playerCount <= 4; playerCount++) {
+            assertRankingRowsWithAvatars(playerCount);
         }
     }
-    void displaysEveryPlayerWithAnAvatar(int playerCount)
+
+    /** The results screen shows the level and the formatted game duration. */
+    @Test
+    void displaysDifficultyAndDuration() throws Exception {
+        assertDifficultyAndDuration(0, "00:00:00");
+        assertDifficultyAndDuration(65, "00:01:05");
+        assertDifficultyAndDuration(3661, "01:01:01");
+    }
+
+    private void assertRankingRowsWithAvatars(int playerCount)
             throws Exception {
 
         SwingUtilities.invokeAndWait(() -> {
@@ -74,16 +81,7 @@ class ResultsViewTest {
         });
     }
 
-    /** Verify game clock formatting for different durations. */
-    @Test
-    void testFormat() {
-        assertAll(
-            () -> assertEquals("00:00:00", GameClock.format(0)),
-            () -> assertEquals("00:01:05", GameClock.format(65)),
-            () -> assertEquals("01:01:01", GameClock.format(3661))
-        );
-    }
-    void displaysDifficultyAndDuration(
+    private void assertDifficultyAndDuration(
             long seconds, String expectedDuration) throws Exception {
 
         SwingUtilities.invokeAndWait(() -> {

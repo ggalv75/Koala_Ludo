@@ -149,9 +149,10 @@ class GameBoardAnimationTest {
                     "בסיום האנימציה, כפתור ההטלה צריך להתעדכן");
 
             rollButton.doClick(0);
-
-            assertEquals(1, rollCalls);
         });
+
+        // With animations on, the roll reaches the Controller after the die stops.
+        awaitRollCalls(1);
     }
 
     private void startFinishAnimation() {
@@ -173,7 +174,7 @@ class GameBoardAnimationTest {
                 findComponents(view, JButton.class)
                         .stream()
                         .filter(button ->
-                                "הטלת קובייה".equals(button.getText()))
+                                "roll-button".equals(button.getName()))
                         .toList();
 
         assertEquals(1, matches.size(),
@@ -187,14 +188,32 @@ class GameBoardAnimationTest {
                 findComponents(view, JCheckBox.class)
                         .stream()
                         .filter(checkbox ->
-                                "אנימציות תנועה ואינטראקציה"
-                                        .equals(checkbox.getText()))
+                                "animations-toggle"
+                                        .equals(checkbox.getName()))
                         .toList();
 
         assertEquals(1, matches.size(),
                 "צריכה להימצא תיבת בחירה אחת לאנימציות");
 
         return matches.get(0);
+    }
+
+    /** Polls on the EDT until the animated roll reaches the Controller. */
+    private void awaitRollCalls(int expected) throws Exception {
+        long deadline = System.currentTimeMillis() + 5000;
+        int[] current = new int[1];
+
+        do {
+            SwingUtilities.invokeAndWait(() -> current[0] = rollCalls);
+
+            if (current[0] >= expected) {
+                return;
+            }
+
+            Thread.sleep(20);
+        } while (System.currentTimeMillis() < deadline);
+
+        fail("ההטלה לא נשלחה בתוך חמש שניות");
     }
 
     private BoardCanvas findCanvas() {
