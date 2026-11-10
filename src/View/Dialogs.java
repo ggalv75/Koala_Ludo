@@ -29,27 +29,11 @@ public final class Dialogs {
                 == JOptionPane.YES_OPTION;
     }
 
-    /** Rules of the Easy level, as implemented in iteration 1. */
+    /** Display the Easy-level rules using the custom Koala dialog. */
     public static void rules(Component parent) {
-        String text = String.join("\n",
-                "• 2-4 שחקנים, לכל שחקן ארבעה כלים שמתחילים בטירה.",
-                "• בכל תור מטילים קובייה רגילה (1-6) ובוחרים כלי מסומן להזזה.",
-                "• כלי יוצא מהטירה למשבצת ההתחלה (#) רק בתוצאה 6.",
-                "• 6 מזכה בהטלה נוספת. השישייה השלישית ברצף מתבטלת והתור עובר.",
-                "• כלי שנוחת על כלי יחיד של יריב במשבצת לא מוגנת מחזיר אותו לטירה.",
-                "• משבצות התחלה (#), הגנה (★) ומסלול הבית מוגנות מאכילה.",
-                "• שני כלים או יותר של אותו שחקן במשבצת יוצרים חסימה (Double Block):",
-                "  יריב לא יכול לעבור דרכה או לנחות עליה.",
-                "• כלי מגיע לחץ בצבע שלו ונכנס למסלול הבית. הכניסה לסיום דורשת הטלה מדויקת.",
-                "• מי שמכניס את ארבעת הכלים מקבל את המקום הבא. המשחק נגמר כשנשאר שחקן אחד.");
-        JTextArea area = new JTextArea(text);
-        area.setEditable(false);
-        area.setFont(Theme.font(15, false));
-        area.setBackground(Theme.SURFACE);
-        area.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
-        JOptionPane.showMessageDialog(parent, area, "חוקי המשחק - רמה קלה", JOptionPane.INFORMATION_MESSAGE);
+        RulesDialog.show(parent);
     }
-
+    
     /** Build an escaped and right-to-left message component. */
     private static JLabel rtl(String message) {
         JLabel label = new JLabel("<html><div dir='rtl' style='width:320px'>"
