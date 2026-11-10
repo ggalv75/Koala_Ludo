@@ -1,16 +1,12 @@
+
 package View;
 
 import Model.*;
-
 import javax.swing.*;
 import java.awt.*;
 import java.util.function.IntConsumer;
 import java.util.function.LongSupplier;
 
-/**
- * Game screen (SRS 3.1.1): board, game clock (FR-48), current player, die and roll button,
- * players' progress and a short game log. It observes the Model through {@link GameListener}.
- */
 public final class GameBoardView extends JPanel implements GameListener {
     private static final long serialVersionUID = 1L;
     private final BoardCanvas canvas;
@@ -22,6 +18,7 @@ public final class GameBoardView extends JPanel implements GameListener {
     private final JButton rollButton = Theme.button("הטלת קובייה", true);
     private final JLabel status = Theme.label("", 14, false);
     private final JPanel playersList = new JPanel(new GridLayout(0, 1, 0, 6));
+    private JPanel playersCard;
     private final JTextArea log = new JTextArea();
     private final LongSupplier elapsedSeconds;
     private final Timer clockTimer;
@@ -31,14 +28,14 @@ public final class GameBoardView extends JPanel implements GameListener {
     private PlayerFinishEvent pendingPlayerFinish;
     private boolean animationsEnabled = true;
 
-    /** Build the game UI and connect it to Controller callbacks. */
     public GameBoardView(LongSupplier elapsedSeconds, Runnable onRoll, IntConsumer onPieceClick, Runnable onExit) {
         this.elapsedSeconds = elapsedSeconds;
         this.canvas = new BoardCanvas(onPieceClick);
+        canvas.setBackground(new Color(245, 238, 219));
+        canvas.setOpaque(true);
         setLayout(new BorderLayout(0, 10));
         setBackground(Theme.BACKGROUND);
         setBorder(BorderFactory.createEmptyBorder(10, 14, 10, 14));
-
         JPanel header = new JPanel(new BorderLayout());
         header.setOpaque(false);
         header.add(Theme.label("לודו קואלה", 24, true), BorderLayout.LINE_START);
@@ -47,82 +44,139 @@ public final class GameBoardView extends JPanel implements GameListener {
         exit.addActionListener(e -> onExit.run());
         header.add(exit, BorderLayout.LINE_END);
         add(header, BorderLayout.NORTH);
-
         JPanel boardCard = Theme.card(new BorderLayout());
+        boardCard.setOpaque(true);
+        boardCard.setBackground(new Color(245, 238, 219));
+        boardCard.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createLineBorder(new Color(193, 180, 153), 2), BorderFactory.createEmptyBorder(14, 14, 14, 14)));
         boardCard.add(canvas, BorderLayout.CENTER);
         add(boardCard, BorderLayout.CENTER);
         add(createSidePanel(onRoll), BorderLayout.LINE_START);
-
         clockTimer = new Timer(1000, e -> clock.setText(GameClock.format(elapsedSeconds.getAsLong())));
         clockTimer.start();
     }
 
-    /** Build the status, die, players and history side panel. */
-    private JPanel createSidePanel(Runnable onRoll) {
+    private JComponent createSidePanel(Runnable onRoll) {
         JPanel side = new JPanel();
         side.setLayout(new BoxLayout(side, BoxLayout.Y_AXIS));
         side.setOpaque(false);
-        side.setPreferredSize(new Dimension(320, 700));
-
-        JPanel info = Theme.card(new GridLayout(0, 1, 0, 4));
-        info.add(clock);
-        info.add(level);
-        info.add(turn);
+        JPanel info = roundedPanel(new BorderLayout(0, 7), new Color(255, 254, 250), Theme.KOALA_BORDER);
+        JPanel infoTop = new JPanel(new BorderLayout(8, 0));
+        infoTop.setOpaque(false);
+        clock.setFont(Theme.font(22, true));
+        clock.setForeground(Theme.KOALA_PRIMARY_DARK);
+        clock.setHorizontalAlignment(SwingConstants.RIGHT);
+        level.setForeground(Theme.KOALA_MUTED);
+        infoTop.add(clock, BorderLayout.EAST);
+        infoTop.add(level, BorderLayout.WEST);
+        info.add(infoTop, BorderLayout.NORTH);
+        turn.setForeground(Theme.KOALA_TEXT);
+        turn.setHorizontalAlignment(SwingConstants.RIGHT);
+        turn.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
+        info.add(turn, BorderLayout.CENTER);
         JCheckBox animations = new JCheckBox("אנימציות משחק וקובייה", true);
         animations.setName("animations-toggle");
         animations.setOpaque(false);
-        animations.setFont(Theme.font(13, false));
+        animations.setFont(Theme.font(12, false));
+        animations.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
         animations.addActionListener(e -> {
             animationsEnabled = animations.isSelected();
             canvas.setAnimationsEnabled(animationsEnabled);
             if (!animationsEnabled) die.finishRollAnimation();
             updateRollButton();
         });
-        info.add(animations);
-        side.add(fullWidth(info, 130));
+        info.add(animations, BorderLayout.SOUTH);
+        side.add(fullWidth(info, 125));
         side.add(Box.createVerticalStrut(10));
 
-        JPanel dice = Theme.card(new BorderLayout(10, 8));
-        JPanel dieRow = new JPanel(new BorderLayout(10, 0));
+        JPanel dice = roundedPanel(new BorderLayout(0, 8), new Color(255, 254, 250), Theme.KOALA_BORDER);
+        JLabel diceTitle = Theme.label("הטלת קובייה", 16, true);
+        diceTitle.setForeground(Theme.KOALA_TEXT);
+        diceTitle.setHorizontalAlignment(SwingConstants.RIGHT);
+        dice.add(diceTitle, BorderLayout.NORTH);
+        JPanel dieRow = new JPanel(new BorderLayout(8, 0));
         dieRow.setOpaque(false);
-        dieRow.add(die, BorderLayout.LINE_START);
-        dieRow.add(rollInfo, BorderLayout.CENTER);
-        dice.add(dieRow, BorderLayout.NORTH);
+        rollInfo.setForeground(Theme.KOALA_MUTED);
+        rollInfo.setHorizontalAlignment(SwingConstants.RIGHT);
+        dieRow.add(die, BorderLayout.CENTER);
+        dieRow.add(rollInfo, BorderLayout.EAST);
+        dice.add(dieRow, BorderLayout.CENTER);
+        JPanel diceBottom = new JPanel(new BorderLayout(0, 6));
+        diceBottom.setOpaque(false);
         rollButton.setName("roll-button");
+        rollButton.setBackground(Theme.KOALA_PRIMARY);
+        rollButton.setForeground(Color.WHITE);
+        rollButton.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createLineBorder(Theme.KOALA_PRIMARY), BorderFactory.createEmptyBorder(8, 12, 8, 12)));
         rollButton.addActionListener(e -> startVisualRoll(onRoll));
-        dice.add(rollButton, BorderLayout.CENTER);
-        rollButton.setPreferredSize(new Dimension(260, 44));
-        status.setForeground(Theme.MUTED);
-        status.setPreferredSize(new Dimension(260, 40));
-        status.setVerticalAlignment(SwingConstants.TOP);
-        dice.add(status, BorderLayout.SOUTH);
-        side.add(fullWidth(dice, 200));
+        rollButton.setPreferredSize(new Dimension(260, 40));
+        diceBottom.add(rollButton, BorderLayout.NORTH);
+        status.setFont(Theme.font(13, false));
+        status.setForeground(Theme.KOALA_MUTED);
+        status.setVerticalAlignment(SwingConstants.CENTER);
+        status.setHorizontalAlignment(SwingConstants.RIGHT);
+        status.setPreferredSize(new Dimension(260, 22));
+        diceBottom.add(status, BorderLayout.SOUTH);
+        dice.add(diceBottom, BorderLayout.SOUTH);
+        side.add(fullWidth(dice, 202));
         side.add(Box.createVerticalStrut(10));
 
-        JPanel players = Theme.card(new BorderLayout(0, 8));
-        players.add(Theme.label("שחקנים", 16, true), BorderLayout.NORTH);
+        playersCard = roundedPanel(new BorderLayout(0, 8), new Color(255, 254, 250), Theme.KOALA_BORDER);
+        JLabel playersTitle = Theme.label("שחקנים", 16, true);
+        playersTitle.setForeground(Theme.KOALA_TEXT);
+        playersTitle.setHorizontalAlignment(SwingConstants.RIGHT);
+        playersCard.add(playersTitle, BorderLayout.NORTH);
         playersList.setOpaque(false);
-        players.add(playersList, BorderLayout.CENTER);
-        side.add(fullWidth(players, 190));
+        playersList.setBorder(BorderFactory.createEmptyBorder(0, 10, 0, 10));
+        playersCard.add(playersList, BorderLayout.CENTER);
+        side.add(fullWidth(playersCard, 150));
         side.add(Box.createVerticalStrut(10));
 
-        JPanel logCard = Theme.card(new BorderLayout(0, 6));
-        logCard.add(Theme.label("מהלך המשחק", 16, true), BorderLayout.NORTH);
+        JPanel logCard = roundedPanel(new BorderLayout(0, 7), new Color(255, 254, 250), Theme.KOALA_BORDER);
+        JLabel logTitle = Theme.label("מהלך המשחק", 16, true);
+        logTitle.setForeground(Theme.KOALA_TEXT);
+        logTitle.setHorizontalAlignment(SwingConstants.RIGHT);
+        logCard.add(logTitle, BorderLayout.NORTH);
         log.setEditable(false);
         log.setLineWrap(true);
         log.setWrapStyleWord(true);
         log.setFont(Theme.font(13, false));
-        JScrollPane scroll = new JScrollPane(log);
-        scroll.setBorder(null);
-        logCard.add(scroll, BorderLayout.CENTER);
-        logCard.setAlignmentX(Component.CENTER_ALIGNMENT);
-        logCard.setMinimumSize(new Dimension(0, 80));
-        logCard.setPreferredSize(new Dimension(320, 120)); // takes whatever height is left
-        side.add(logCard);
-        return side;
+        log.setForeground(Theme.KOALA_TEXT);
+        log.setBackground(Theme.KOALA_ROW_BACKGROUND);
+        log.setMargin(new Insets(8, 8, 8, 8));
+        log.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
+        JScrollPane logScroll = new JScrollPane(log);
+        logScroll.setBorder(BorderFactory.createLineBorder(Theme.KOALA_BORDER));
+        logScroll.getVerticalScrollBar().setUnitIncrement(12);
+        logCard.add(logScroll, BorderLayout.CENTER);
+        side.add(fullWidth(logCard, 180));
+
+        JScrollPane sidebar = new JScrollPane(side, JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED, JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+        sidebar.setBorder(null);
+        sidebar.setOpaque(false);
+        sidebar.getViewport().setOpaque(false);
+        sidebar.setPreferredSize(new Dimension(338, 700));
+        sidebar.getVerticalScrollBar().setUnitIncrement(16);
+        return sidebar;
     }
 
-    /** Set a consistent width and height for a side panel section. */
+    private static JPanel roundedPanel(LayoutManager layout, Color background, Color outline) {
+        JPanel panel = new JPanel(layout) {
+            @Override
+            protected void paintComponent(Graphics g) {
+                super.paintComponent(g);
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(background);
+                g2.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 18, 18);
+                g2.setColor(outline);
+                g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 18, 18);
+                g2.dispose();
+            }
+        };
+        panel.setOpaque(false);
+        panel.setBorder(BorderFactory.createEmptyBorder(12, 14, 12, 14));
+        return panel;
+    }
+
     private static JComponent fullWidth(JComponent component, int height) {
         component.setAlignmentX(Component.CENTER_ALIGNMENT);
         component.setMinimumSize(new Dimension(0, height));
@@ -131,30 +185,25 @@ public final class GameBoardView extends JPanel implements GameListener {
         return component;
     }
 
-    /** Remember a committed movement until its state update arrives. */
     @Override
     public void onPieceMoved(Move move) {
-        pendingMove = move; // next onStateChanged contains the committed game state
+        pendingMove = move;
     }
 
-    /** Cache semantic interaction effects until the committed state notification arrives. */
     @Override
     public void onPieceInteraction(PieceInteractionEvent event) {
         pendingInteraction = event;
     }
 
-    /** Cache the earned rank until the finishing move is ready to animate. */
     @Override
     public void onPlayerFinished(PlayerFinishEvent event) {
         pendingPlayerFinish = event;
     }
 
-    /** Refresh the board using the Model's state and any completed movement events. */
     @Override
     public void onStateChanged(GameState state) {
         displayedState = state;
         canvas.setState(state, pendingMove, pendingInteraction, pendingPlayerFinish);
-        PlayerFinishEvent finishedPlayer = pendingPlayerFinish;
         pendingMove = null;
         pendingInteraction = null;
         pendingPlayerFinish = null;
@@ -168,36 +217,55 @@ public final class GameBoardView extends JPanel implements GameListener {
         die.setValue(latest == null ? 0 : latest.value());
         if (!die.isRolling()) rollInfo.setText(rollText(state));
         updateRollButton();
-        String statusMessage = finishedPlayer == null ? state.lastMessage()
-                : finishedPlayer.playerName() + " השלים/ה את כל ארבעת הכלים! מקום " + finishedPlayer.rank();
-        status.setText("<html>" + Dialogs.escape(statusMessage) + "</html>");
+        status.setText(state.phase() == GameState.Phase.GAME_OVER ? "המשחק הסתיים" : "התור של " + current.name());
         updatePlayers(state);
-        log.setText(String.join("\n", state.recentLog()));
+        log.setText(buildLogText(state));
         log.setCaretPosition(0);
         log.applyComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
     }
 
-    /** Label the active roll separately from the last visible result. */
     private static String rollText(GameState state) {
         DiceRoll active = state.lastRoll();
-        if (state.phase() == GameState.Phase.WAITING_FOR_MOVE && active != null)
-            return "תוצאת ההטלה: " + active.value();
+        if (state.phase() == GameState.Phase.WAITING_FOR_MOVE && active != null) return "תוצאת ההטלה: " + active.value();
         DiceRoll latest = state.latestRoll();
         return latest == null ? "ממתין להטלה" : "ההטלה האחרונה: " + latest.value();
     }
 
-    /** Start one animated die roll without letting another roll overlap it. */
+    private static String buildLogText(GameState state) {
+        StringBuilder text = new StringBuilder();
+        for (String entry : state.recentLog()) {
+            if (entry == null || entry.isBlank()) continue;
+            if (text.length() > 0) text.append("\n");
+            text.append(formatLogEntry(entry, state));
+        }
+        return text.toString();
+    }
+
+    private static String formatLogEntry(String entry, GameState state) {
+        String start = "המשחק התחיל. התור של ";
+        if (entry.startsWith(start)) return entry.substring(start.length()).trim() + ": המשחק התחיל";
+        String turnPrefix = "התור של ";
+        if (entry.startsWith(turnPrefix)) return entry.substring(turnPrefix.length()).trim() + ": התחיל התור";
+        for (Player player : state.players()) {
+            String name = player.name();
+            if (entry.startsWith(name + " ")) return name + ": " + entry.substring(name.length() + 1);
+            String finishSuffix = " של " + name + " הגיע לבית הסיום.";
+            if (entry.startsWith("כלי ") && entry.endsWith(finishSuffix)) return name + ": " + entry.substring(0, entry.length() - finishSuffix.length()) + " הגיע לבית הסיום.";
+            String bonusPrefix = "בזכות ה-6, " + name + " ";
+            if (entry.startsWith(bonusPrefix)) return name + ": בזכות ה-6, " + entry.substring(bonusPrefix.length());
+        }
+        return "מערכת: " + entry;
+    }
+
     private void startVisualRoll(Runnable onRoll) {
-        if (displayedState == null || displayedState.phase() != GameState.Phase.WAITING_FOR_ROLL
-                || canvas.isBusy() || die.isRolling()) return;
+        if (displayedState == null || displayedState.phase() != GameState.Phase.WAITING_FOR_ROLL || canvas.isBusy() || die.isRolling()) return;
         if (!animationsEnabled) {
             onRoll.run();
             return;
         }
         die.animateRoll(() -> {
             try {
-                if (displayedState != null
-                        && displayedState.phase() == GameState.Phase.WAITING_FOR_ROLL) onRoll.run();
+                if (displayedState != null && displayedState.phase() == GameState.Phase.WAITING_FOR_ROLL) onRoll.run();
             } finally {
                 updateRollButton();
             }
@@ -206,36 +274,57 @@ public final class GameBoardView extends JPanel implements GameListener {
         updateRollButton();
     }
 
-    /** Refresh player progress and ranking labels. */
     private void updatePlayers(GameState state) {
         playersList.removeAll();
         for (Player player : state.players()) {
-            String text = player.name() + "  |  בבית: " + state.finishedPieceCount(player) + "/" + GameRules.PIECES_PER_PLAYER;
-            if (player.isFinished()) text += "  |  מקום " + player.rank();
-            JLabel row = Theme.label(text, 14, player == state.currentPlayer());
-            row.setIcon(KoalaPiecePainter.icon(player.color(), 22));
-            row.setIconTextGap(8);
-            row.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
-            playersList.add(row);
+            boolean active = player == state.currentPlayer();
+            JPanel row = roundedPanel(new BorderLayout(0, 3), active ? Theme.softColorOf(player.color()) : Theme.KOALA_ROW_BACKGROUND, active ? Theme.colorOf(player.color()) : Theme.KOALA_BORDER);
+            row.setBorder(BorderFactory.createEmptyBorder(3, 8, 3, 8));
+            JPanel rowTop = new JPanel(new BorderLayout(4, 0));
+            rowTop.setOpaque(false);
+            String nameText = player.name() + (player.isFinished() ? "  |  מקום " + player.rank() : "");
+            JLabel name = Theme.label(nameText, 13, active);
+            name.setIcon(KoalaPiecePainter.icon(player.color(), 20));
+            name.setIconTextGap(6);
+            name.setHorizontalAlignment(SwingConstants.RIGHT);
+            name.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
+            rowTop.add(name, BorderLayout.EAST);
+            int finished = state.finishedPieceCount(player);
+            JLabel counter = Theme.label(finished + "/" + GameRules.PIECES_PER_PLAYER + " בבית", 12, false);
+            counter.setForeground(Theme.KOALA_MUTED);
+            rowTop.add(counter, BorderLayout.WEST);
+            row.add(rowTop, BorderLayout.CENTER);
+            JProgressBar progress = new JProgressBar(0, GameRules.PIECES_PER_PLAYER);
+            progress.setValue(finished);
+            progress.setForeground(Theme.colorOf(player.color()));
+            progress.setBackground(new Color(226, 233, 227));
+            progress.setBorderPainted(false);
+            progress.setPreferredSize(new Dimension(10, 5));
+            row.add(progress, BorderLayout.SOUTH);
+            JPanel shiftedRow = new JPanel(new BorderLayout());
+            shiftedRow.setOpaque(false);
+            shiftedRow.setBorder(BorderFactory.createEmptyBorder(0, 10, 0, 0));
+            shiftedRow.add(row, BorderLayout.CENTER);
+            playersList.add(shiftedRow);
         }
+        int height = 52 + state.players().size() * 43;
+        playersCard.setMinimumSize(new Dimension(0, height));
+        playersCard.setPreferredSize(new Dimension(320, height));
+        playersCard.setMaximumSize(new Dimension(Integer.MAX_VALUE, height));
+        playersCard.revalidate();
         playersList.revalidate();
         playersList.repaint();
     }
 
-    /** Disable rolling whenever the rules or an animation forbid it. */
     private void updateRollButton() {
-        rollButton.setEnabled(displayedState != null
-                && displayedState.phase() == GameState.Phase.WAITING_FOR_ROLL
-                && !canvas.isBusy() && !die.isRolling());
+        rollButton.setEnabled(displayedState != null && displayedState.phase() == GameState.Phase.WAITING_FOR_ROLL && !canvas.isBusy() && !die.isRolling());
         rollButton.setText(die.isRolling() ? "הקובייה מתגלגלת..." : "הטלת קובייה");
     }
 
-    /** After the last animated piece finishes, the Controller can show the results. */
     public void whenVisualEffectsFinish(Runnable continuation) {
         canvas.whenEffectsFinish(continuation);
     }
 
-    /** Called by the Controller when the game ends or the player leaves the screen. */
     public void stopClock() {
         clockTimer.stop();
         die.cancelRollAnimation();
