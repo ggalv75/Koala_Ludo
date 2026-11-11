@@ -20,10 +20,20 @@ public final class MainMenuView extends JPanel {
     private static final Color PALE = Theme.KOALA_BACKGROUND;
     private static final Color MUTED = Theme.KOALA_MUTED;
 
+    /** Menu without sound controls. */
     public MainMenuView(
             Runnable onNewGame,
             Runnable onRules,
             Runnable onExit) {
+        this(onNewGame, onRules, onExit, null);
+    }
+
+    /** Menu with a music on/off button; {@code sounds} may be null to hide it. */
+    public MainMenuView(
+            Runnable onNewGame,
+            Runnable onRules,
+            Runnable onExit,
+            GameSounds sounds) {
 
         setLayout(new GridBagLayout());
         setOpaque(true);
@@ -141,7 +151,18 @@ public final class MainMenuView extends JPanel {
         footer.setFont(new Font(Font.DIALOG, Font.BOLD, 11));
         footer.setForeground(MUTED);
 
-        card.add(footer, BorderLayout.SOUTH);
+        if (sounds == null) {
+            card.add(footer, BorderLayout.SOUTH);
+        } else {
+            JPanel bottom = new JPanel(new BorderLayout(0, 10));
+            bottom.setOpaque(false);
+            JPanel soundRow = new JPanel(new FlowLayout(FlowLayout.CENTER, 0, 0));
+            soundRow.setOpaque(false);
+            soundRow.add(new SoundToggle(SoundToggle.Kind.MUSIC, sounds));
+            bottom.add(soundRow, BorderLayout.CENTER);
+            bottom.add(footer, BorderLayout.SOUTH);
+            card.add(bottom, BorderLayout.SOUTH);
+        }
 
         add(card);
     }

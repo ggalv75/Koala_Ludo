@@ -31,6 +31,8 @@ public final class BoardCanvas extends JPanel {
     private final javax.swing.Timer effectsTimer;
     private final List<Runnable> onEffectsFinished = new ArrayList<>();
     private boolean animationsEnabled = true;
+    private Runnable onSquareLanded = () -> { };
+    private int landedSquares;
     private int hoveredPieceId = -1;
     private Motion motion;
     private Celebration celebration;
@@ -77,6 +79,7 @@ public final class BoardCanvas extends JPanel {
             int legs = committedMove.release() ? 1 : Math.max(1, committedMove.toStep() - committedMove.fromStep());
             long duration = committedMove.release() ? RELEASE_DURATION_NS : legs * LEG_DURATION_NS;
             motion = new Motion(committedMove, piece.color(), System.nanoTime(), duration);
+            landedSquares = 0;
             pendingInteraction = interaction != null && interaction.hasVisualEffect() ? interaction : null;
             interactionFx = null;
             celebration = null;
@@ -117,6 +120,11 @@ public final class BoardCanvas extends JPanel {
         repaint();
     }
 
+    /** Called once each time an animated pawn lands on a square (used for the step sound). */
+    public void setOnSquareLanded(Runnable listener) {
+        onSquareLanded = Objects.requireNonNull(listener);
+    }
+
     /** Prevent user input until all sequential visual effects finish. */
     public boolean isBusy() {
         return motion != null || celebration != null || interactionFx != null
@@ -154,6 +162,7 @@ public final class BoardCanvas extends JPanel {
     private void tick() {
         long now = System.nanoTime();
         boolean wasBusy = isBusy();
+        reportLandedSquares(now);
         if (motion != null && now - motion.startedAt() >= motion.duration()) {
             Motion completed = motion;
             motion = null;
@@ -178,6 +187,22 @@ public final class BoardCanvas extends JPanel {
         updateTimer();
         repaint();
         if (wasBusy && !isBusy()) completeVisualEffects();
+    }
+
+    /** Fire the landing callback when the moving pawn reaches the next square (at most once per frame). */
+    private void reportLandedSquares(long now) {
+        if (motion == null) return;
+        int legs = legsOf(motion.move());
+        long elapsed = Math.min(now - motion.startedAt(), motion.duration());
+        int landed = (int) Math.min(legs, elapsed * legs / motion.duration());
+        if (landed > landedSquares) {
+            landedSquares = landed;
+            onSquareLanded.run();
+        }
+    }
+
+    private static int legsOf(Move move) {
+        return move.release() ? 1 : Math.max(1, move.toStep() - move.fromStep());
     }
 
     /** Start the player-wide celebration only after the last pawn's effects finish. */

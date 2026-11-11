@@ -1,6 +1,7 @@
 package Controller;
 
 import View.Dialogs;
+import View.SoundManager;
 
 import javax.swing.*;
 
@@ -19,7 +20,7 @@ public final class LudoApplication {
                 // The default look and feel is fine as well.
             }
             try {
-                new GameController().start();
+                new GameController(new SoundManager()).start();
             } catch (RuntimeException error) {
                 error.printStackTrace();
                 Dialogs.error(null, "לא ניתן להפעיל את המשחק: " + error.getMessage());

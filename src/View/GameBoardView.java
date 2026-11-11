@@ -4,6 +4,7 @@ package View;
 import Model.*;
 import javax.swing.*;
 import java.awt.*;
+import java.util.Objects;
 import java.util.function.IntConsumer;
 import java.util.function.LongSupplier;
 
@@ -27,10 +28,20 @@ public final class GameBoardView extends JPanel implements GameListener {
     private PieceInteractionEvent pendingInteraction;
     private PlayerFinishEvent pendingPlayerFinish;
     private boolean animationsEnabled = true;
+    private final GameSounds sounds;
 
+    /** Board without audio (used by tests and anywhere sound is not needed). */
     public GameBoardView(LongSupplier elapsedSeconds, Runnable onRoll, IntConsumer onPieceClick, Runnable onExit) {
+        this(elapsedSeconds, onRoll, onPieceClick, onExit, GameSounds.silent());
+    }
+
+    /** Board that plays dice and step sounds and shows the music and sound switches. */
+    public GameBoardView(LongSupplier elapsedSeconds, Runnable onRoll, IntConsumer onPieceClick, Runnable onExit,
+                         GameSounds sounds) {
         this.elapsedSeconds = elapsedSeconds;
+        this.sounds = Objects.requireNonNull(sounds);
         this.canvas = new BoardCanvas(onPieceClick);
+        canvas.setOnSquareLanded(() -> sounds.play(SoundEffect.STEP));
         canvas.setBackground(new Color(245, 238, 219));
         canvas.setOpaque(true);
         setLayout(new BorderLayout(0, 10));
@@ -42,7 +53,12 @@ public final class GameBoardView extends JPanel implements GameListener {
         JButton exit = Theme.button("יציאה למסך הפתיחה", false);
         exit.setName("board-exit");
         exit.addActionListener(e -> onExit.run());
-        header.add(exit, BorderLayout.LINE_END);
+        JPanel headerActions = new JPanel(new FlowLayout(FlowLayout.LEADING, 8, 0));
+        headerActions.setOpaque(false);
+        headerActions.add(new SoundToggle(SoundToggle.Kind.MUSIC, sounds));
+        headerActions.add(new SoundToggle(SoundToggle.Kind.EFFECTS, sounds));
+        headerActions.add(exit);
+        header.add(headerActions, BorderLayout.LINE_END);
         add(header, BorderLayout.NORTH);
         JPanel boardCard = Theme.card(new BorderLayout());
         boardCard.setOpaque(true);
@@ -203,6 +219,8 @@ public final class GameBoardView extends JPanel implements GameListener {
     @Override
     public void onStateChanged(GameState state) {
         displayedState = state;
+        // With animations off there is no walk to follow, so the move gets a single step sound.
+        if (pendingMove != null && !animationsEnabled) sounds.play(SoundEffect.STEP);
         canvas.setState(state, pendingMove, pendingInteraction, pendingPlayerFinish);
         pendingMove = null;
         pendingInteraction = null;
@@ -259,6 +277,7 @@ public final class GameBoardView extends JPanel implements GameListener {
 
     private void startVisualRoll(Runnable onRoll) {
         if (displayedState == null || displayedState.phase() != GameState.Phase.WAITING_FOR_ROLL || canvas.isBusy() || die.isRolling()) return;
+        sounds.play(SoundEffect.DICE_ROLL);
         if (!animationsEnabled) {
             onRoll.run();
             return;

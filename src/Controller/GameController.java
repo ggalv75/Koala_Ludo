@@ -4,6 +4,7 @@ import Model.*;
 import View.*;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -12,9 +13,16 @@ import java.util.Optional;
  */
 public final class GameController {
     private final MainWindow window = new MainWindow();
+    private final GameSounds sounds;
     private GameEngine engine;
     private GameBoardView boardView;
     private GameSetupView setupView;
+
+    /** Controller without audio (used by tests). */
+    public GameController() { this(GameSounds.silent()); }
+
+    /** Controller that passes the given sound system to the screens. */
+    public GameController(GameSounds sounds) { this.sounds = Objects.requireNonNull(sounds); }
 
     /** Show the application main menu. */
     public void start() { showMainMenu(); }
@@ -22,7 +30,7 @@ public final class GameController {
     /** Reset the current session and display the main menu. */
     private void showMainMenu() {
         leaveCurrentGame();
-        window.showScreen(new MainMenuView(this::showSetup, this::showRules, this::exitApplication));
+        window.showScreen(new MainMenuView(this::showSetup, this::showRules, this::exitApplication, sounds));
     }
 
     /** Show player and difficulty configuration. */
@@ -42,7 +50,7 @@ public final class GameController {
             return;
         }
         engine = new GameEngine(difficulty, names, colors);
-        boardView = new GameBoardView(engine::elapsedSeconds, this::rollDice, this::selectPiece, this::confirmLeaveGame);
+        boardView = new GameBoardView(engine::elapsedSeconds, this::rollDice, this::selectPiece, this::confirmLeaveGame, sounds);
         engine.addListener(boardView);
         engine.addListener(new GameListener() {
             /** Notify the Controller that the game ended. */
@@ -78,6 +86,7 @@ public final class GameController {
     /** Stop animation timers and open the final ranking screen. */
     private void showResultsNow(GameResult result) {
         if (boardView != null) boardView.stopClock();
+        sounds.play(SoundEffect.GAME_OVER);
         Dialogs.info(window.component(), "סיום המשחק", "המנצח/ת: " + result.winner().name());
         leaveCurrentGame();
         window.showScreen(new ResultsView(result, this::showMainMenu));
@@ -93,6 +102,7 @@ public final class GameController {
 
     /** Close the application window and terminate the process. */
     private void exitApplication() {
+        sounds.shutdown();
         window.close();
         System.exit(0);
     }
