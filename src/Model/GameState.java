@@ -10,7 +10,6 @@ public final class GameState {
     public enum Phase { WAITING_FOR_ROLL, WAITING_FOR_MOVE, GAME_OVER }
 
     private static final int LOG_SIZE = 40;
-
     private final Board board;
     private final List<Player> players;
     private final List<Piece> pieces;
@@ -22,6 +21,7 @@ public final class GameState {
     private List<Move> legalMoves = List.of();
     private final Deque<String> log = new ArrayDeque<>();
     private GameResult result;
+    private String feedbackMessage;
 
     /** FR-04: four pieces per player, all starting in the owner's castle. */
     GameState(Board board, List<Player> players) {
@@ -89,11 +89,17 @@ public final class GameState {
         return legalMoves.stream().anyMatch(move -> move.pieceId() == piece.id());
     }
 
-    /** Latest message for the status line. */
+    /** Return the most recent game-log entry. */
     public String lastMessage() { return log.isEmpty() ? "" : log.peekFirst(); }
 
     /** Most recent messages first. */
     public List<String> recentLog() { return List.copyOf(log); }
+    
+    /** Return the current feedback message, or null if none exists. */
+    public String feedbackMessage() { return feedbackMessage; }
+    
+    /** Update the feedback displayed outside the game log. */
+    void setFeedbackMessage(String message) { feedbackMessage = message; }
 
     /** Update the active player as part of turn management. */
     void setCurrentPlayerIndex(int index) { this.currentPlayerIndex = index; }

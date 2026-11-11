@@ -28,6 +28,7 @@ public final class GameBoardView extends JPanel implements GameListener {
     private PlayerFinishEvent pendingPlayerFinish;
     private boolean animationsEnabled = true;
 
+    /** Initializes the game board, sidebar, action handlers and clock timer. */
     public GameBoardView(LongSupplier elapsedSeconds, Runnable onRoll, IntConsumer onPieceClick, Runnable onExit) {
         this.elapsedSeconds = elapsedSeconds;
         this.canvas = new BoardCanvas(onPieceClick);
@@ -55,6 +56,7 @@ public final class GameBoardView extends JPanel implements GameListener {
         clockTimer.start();
     }
 
+    /** Builds the sidebar containing game status, dice controls, players and event log. */
     private JComponent createSidePanel(Runnable onRoll) {
         JPanel side = new JPanel();
         side.setLayout(new BoxLayout(side, BoxLayout.Y_AXIS));
@@ -87,7 +89,6 @@ public final class GameBoardView extends JPanel implements GameListener {
         info.add(animations, BorderLayout.SOUTH);
         side.add(fullWidth(info, 125));
         side.add(Box.createVerticalStrut(10));
-
         JPanel dice = roundedPanel(new BorderLayout(0, 8), new Color(255, 254, 250), Theme.KOALA_BORDER);
         JLabel diceTitle = Theme.label("הטלת קובייה", 16, true);
         diceTitle.setForeground(Theme.KOALA_TEXT);
@@ -118,7 +119,6 @@ public final class GameBoardView extends JPanel implements GameListener {
         dice.add(diceBottom, BorderLayout.SOUTH);
         side.add(fullWidth(dice, 202));
         side.add(Box.createVerticalStrut(10));
-
         playersCard = roundedPanel(new BorderLayout(0, 8), new Color(255, 254, 250), Theme.KOALA_BORDER);
         JLabel playersTitle = Theme.label("שחקנים", 16, true);
         playersTitle.setForeground(Theme.KOALA_TEXT);
@@ -129,7 +129,6 @@ public final class GameBoardView extends JPanel implements GameListener {
         playersCard.add(playersList, BorderLayout.CENTER);
         side.add(fullWidth(playersCard, 150));
         side.add(Box.createVerticalStrut(10));
-
         JPanel logCard = roundedPanel(new BorderLayout(0, 7), new Color(255, 254, 250), Theme.KOALA_BORDER);
         JLabel logTitle = Theme.label("מהלך המשחק", 16, true);
         logTitle.setForeground(Theme.KOALA_TEXT);
@@ -148,7 +147,6 @@ public final class GameBoardView extends JPanel implements GameListener {
         logScroll.getVerticalScrollBar().setUnitIncrement(12);
         logCard.add(logScroll, BorderLayout.CENTER);
         side.add(fullWidth(logCard, 180));
-
         JScrollPane sidebar = new JScrollPane(side, JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED, JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
         sidebar.setBorder(null);
         sidebar.setOpaque(false);
@@ -158,8 +156,10 @@ public final class GameBoardView extends JPanel implements GameListener {
         return sidebar;
     }
 
+    /** Creates a rounded panel with a custom background and border. */
     private static JPanel roundedPanel(LayoutManager layout, Color background, Color outline) {
         JPanel panel = new JPanel(layout) {
+            /** Paints the panel's rounded background and outline. */
             @Override
             protected void paintComponent(Graphics g) {
                 super.paintComponent(g);
@@ -177,6 +177,7 @@ public final class GameBoardView extends JPanel implements GameListener {
         return panel;
     }
 
+    /** Sets consistent width constraints for sidebar sections. */
     private static JComponent fullWidth(JComponent component, int height) {
         component.setAlignmentX(Component.CENTER_ALIGNMENT);
         component.setMinimumSize(new Dimension(0, height));
@@ -185,21 +186,25 @@ public final class GameBoardView extends JPanel implements GameListener {
         return component;
     }
 
+    /** Stores the committed move for the next board animation. */
     @Override
     public void onPieceMoved(Move move) {
         pendingMove = move;
     }
 
+    /** Stores capture, protection and blocking effects until the next state update. */
     @Override
     public void onPieceInteraction(PieceInteractionEvent event) {
         pendingInteraction = event;
     }
 
+    /** Stores the player-finish event for the completion animation. */
     @Override
     public void onPlayerFinished(PlayerFinishEvent event) {
         pendingPlayerFinish = event;
     }
 
+    /** Refreshes the board and sidebar from the latest game state. */
     @Override
     public void onStateChanged(GameState state) {
         displayedState = state;
@@ -217,13 +222,16 @@ public final class GameBoardView extends JPanel implements GameListener {
         die.setValue(latest == null ? 0 : latest.value());
         if (!die.isRolling()) rollInfo.setText(rollText(state));
         updateRollButton();
-        status.setText(state.phase() == GameState.Phase.GAME_OVER ? "המשחק הסתיים" : "התור של " + current.name());
+        String feedback = state.feedbackMessage();
+        status.setText(feedback != null ? feedback : state.phase() == GameState.Phase.GAME_OVER ? "המשחק הסתיים" : "התור של " + current.name());
+        status.setToolTipText(feedback);
         updatePlayers(state);
         log.setText(buildLogText(state));
         log.setCaretPosition(0);
         log.applyComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
     }
 
+    /** Returns the active roll result or the most recent completed roll. */
     private static String rollText(GameState state) {
         DiceRoll active = state.lastRoll();
         if (state.phase() == GameState.Phase.WAITING_FOR_MOVE && active != null) return "תוצאת ההטלה: " + active.value();
@@ -231,32 +239,12 @@ public final class GameBoardView extends JPanel implements GameListener {
         return latest == null ? "ממתין להטלה" : "ההטלה האחרונה: " + latest.value();
     }
 
+    /** Formats recent game events with the newest message first. */
     private static String buildLogText(GameState state) {
-        StringBuilder text = new StringBuilder();
-        for (String entry : state.recentLog()) {
-            if (entry == null || entry.isBlank()) continue;
-            if (text.length() > 0) text.append("\n");
-            text.append(formatLogEntry(entry, state));
-        }
-        return text.toString();
+        return String.join("\n", state.recentLog());
     }
 
-    private static String formatLogEntry(String entry, GameState state) {
-        String start = "המשחק התחיל. התור של ";
-        if (entry.startsWith(start)) return entry.substring(start.length()).trim() + ": המשחק התחיל";
-        String turnPrefix = "התור של ";
-        if (entry.startsWith(turnPrefix)) return entry.substring(turnPrefix.length()).trim() + ": התחיל התור";
-        for (Player player : state.players()) {
-            String name = player.name();
-            if (entry.startsWith(name + " ")) return name + ": " + entry.substring(name.length() + 1);
-            String finishSuffix = " של " + name + " הגיע לבית הסיום.";
-            if (entry.startsWith("כלי ") && entry.endsWith(finishSuffix)) return name + ": " + entry.substring(0, entry.length() - finishSuffix.length()) + " הגיע לבית הסיום.";
-            String bonusPrefix = "בזכות ה-6, " + name + " ";
-            if (entry.startsWith(bonusPrefix)) return name + ": בזכות ה-6, " + entry.substring(bonusPrefix.length());
-        }
-        return "מערכת: " + entry;
-    }
-
+    /** Plays the dice animation before requesting a roll from the Controller. */
     private void startVisualRoll(Runnable onRoll) {
         if (displayedState == null || displayedState.phase() != GameState.Phase.WAITING_FOR_ROLL || canvas.isBusy() || die.isRolling()) return;
         if (!animationsEnabled) {
@@ -274,6 +262,7 @@ public final class GameBoardView extends JPanel implements GameListener {
         updateRollButton();
     }
 
+    /** Rebuilds player rows with current-turn highlighting, ranks and finish progress. */
     private void updatePlayers(GameState state) {
         playersList.removeAll();
         for (Player player : state.players()) {
@@ -316,15 +305,18 @@ public final class GameBoardView extends JPanel implements GameListener {
         playersList.repaint();
     }
 
+    /** Enables dice rolling only when the game and animations allow it. */
     private void updateRollButton() {
         rollButton.setEnabled(displayedState != null && displayedState.phase() == GameState.Phase.WAITING_FOR_ROLL && !canvas.isBusy() && !die.isRolling());
         rollButton.setText(die.isRolling() ? "הקובייה מתגלגלת..." : "הטלת קובייה");
     }
 
+    /** Runs the continuation after all board visual effects finish. */
     public void whenVisualEffectsFinish(Runnable continuation) {
         canvas.whenEffectsFinish(continuation);
     }
 
+    /** Stops the clock timer, dice animation and board effects. */
     public void stopClock() {
         clockTimer.stop();
         die.cancelRollAnimation();

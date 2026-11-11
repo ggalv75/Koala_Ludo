@@ -33,7 +33,7 @@ public final class GameEngine {
         this.state = new GameState(BoardFactory.create(difficulty, boardRandom), players);
         this.dice = Objects.requireNonNull(dice);
         this.gameClock = new GameClock(clock);
-        state.log("המשחק התחיל. התור של " + state.currentPlayer().name());
+        state.log("המשחק התחיל!");
     }
 
     /** Return the current authoritative game state. */
@@ -51,30 +51,31 @@ public final class GameEngine {
     /** FR-15, FR-18, FR-19, FR-20: rolls the die and works out what the player may do. */
     public void rollDice() {
         if (state.phase() != GameState.Phase.WAITING_FOR_ROLL) {
-            rejectAction("יש לבחור כלי להזזה לפני הטלה נוספת.");
+            rejectAction("בחר כלי לפני הטלה נוספת.");
             return;
         }
+        state.setFeedbackMessage(null);
+        Player player = state.currentPlayer();
         DiceRoll roll = dice.roll();
         state.setLastRoll(roll);
-        state.log(state.currentPlayer().name() + " הטיל/ה " + roll.value());
-
+        state.log(player.name() + ": תוצאת הקובייה - " + roll.value());
         List<Move> moves = MoveValidator.legalMoves(state, roll);
         switch (TurnManager.afterRoll(state, roll, !moves.isEmpty())) {
             case CHOOSE_PIECE -> {
                 state.setLegalMoves(moves);
                 state.setPhase(GameState.Phase.WAITING_FOR_MOVE);
-                state.log("בחרו כלי מסומן להזזה.");
             }
             case ROLL_AGAIN -> {
-                state.log("אין מהלך חוקי, אבל 6 מזכה בהטלה נוספת.");
+                state.log(player.name() + ": אין מהלך חוקי");
+                state.log("תור נוסף ל" + player.name() + "!");
                 state.setLastRoll(null);
             }
             case PASS_TURN -> {
-                state.log("אין מהלך חוקי. התור עובר.");
+                state.log(player.name() + ": אין מהלך חוקי");
                 passTurn();
             }
             case THIRD_SIX_CANCELLED -> {
-                state.log("שלוש הטלות 6 ברצף: ההטלה השלישית מבוטלת והתור עובר.");
+                state.log(player.name() + ": שלוש שישיות ברצף - התור בוטל!");
                 passTurn();
             }
         }
@@ -83,25 +84,22 @@ public final class GameEngine {
 
     /** NFR-01: an action that is not allowed now only shows a message to the player. */
     private void rejectAction(String hint) {
-        state.log(state.phase() == GameState.Phase.GAME_OVER ? "המשחק הסתיים." : hint);
+        state.setFeedbackMessage(state.phase() == GameState.Phase.GAME_OVER ? "המשחק הסתיים." : hint);
         notifyChanged();
     }
 
     /** Reject illegal selections or commit exactly one approved move. */
     public boolean movePiece(int pieceId) {
         if (state.phase() != GameState.Phase.WAITING_FOR_MOVE) {
-            state.log(state.phase() == GameState.Phase.GAME_OVER
-                    ? "המשחק הסתיים."
-                    : "יש להטיל קובייה לפני בחירת כלי.");
-            notifyChanged();
+            rejectAction("הטל קובייה לפני בחירת כלי.");
             return false;
         }
         Optional<Move> move = state.legalMoves().stream().filter(m -> m.pieceId() == pieceId).findFirst();
         if (move.isEmpty()) {
-            state.log("לכלי הזה אין מהלך חוקי בהטלה הנוכחית. בחרו כלי מסומן.");
-            notifyChanged();
+            rejectAction("בחר כלי מסומן אחר.");
             return false;
         }
+        state.setFeedbackMessage(null);
         apply(move.get());
         return true;
     }
@@ -113,28 +111,21 @@ public final class GameEngine {
         Position from = state.positionOf(piece);
         Position to = state.board().positionOf(piece.color(), move.toStep());
         Map<Position, Set<Integer>> before = snapshotBlocks(from, to);
-
         piece.moveTo(move.toStep());
         state.setLegalMoves(List.of());
-        state.log(describe(player, piece, move));
-
         PieceInteractionEvent.Capture capture = null;
         Optional<Piece> captured = InteractionRules.capturableOpponent(state, piece);
         if (captured.isPresent()) {
             Piece victim = captured.get();
             capture = new PieceInteractionEvent.Capture(victim.id(), to);
             victim.returnToCastle();
-            state.log("אכילה! כלי " + victim.number() + " של "
-                    + state.players().get(victim.ownerIndex()).name() + " חזר לטירה.");
+            state.log(player.name() + " אכל כלי של " + state.players().get(victim.ownerIndex()).name() + "!");
         }
         Position protection = InteractionRules.sharesProtectedSquareWithOpponent(state, piece) ? to : null;
-        Position blockedBy = move.partial()
-                ? state.board().positionOf(piece.color(), move.toStep() + 1) : null;
-        PieceInteractionEvent interaction = new PieceInteractionEvent(
-                capture, protection, blockedBy, changesToBlocks(before));
-
+        Position blockedBy = move.partial() ? state.board().positionOf(piece.color(), move.toStep() + 1) : null;
+        PieceInteractionEvent interaction = new PieceInteractionEvent(capture, protection, blockedBy, changesToBlocks(before));
         if (state.isFinished(piece)) {
-            state.log("כלי " + piece.number() + " של " + player.name() + " הגיע לבית הסיום.");
+            state.log(player.name() + " הכניס כלי לבית הסיום!");
         }
         PlayerFinishEvent playerFinish = rankIfAllPiecesHome(player);
         boolean gameOver = endTurnAfterMove(player, playerFinish != null);
@@ -147,7 +138,7 @@ public final class GameEngine {
     /** FR-45: ranks the player when all four pieces are home. Returns the finish event, or null. */
     private PlayerFinishEvent rankIfAllPiecesHome(Player player) {
         if (!RankingManager.rankIfAllPiecesHome(state, player)) return null;
-        state.log(player.name() + " סיים/ה במקום " + player.rank() + ".");
+        state.log("מקום " + player.rank() + ": " + player.name());
         return new PlayerFinishEvent(player.index(), player.name(), player.color(), player.rank());
     }
 
@@ -163,7 +154,7 @@ public final class GameEngine {
         if (TurnManager.rollsAgain(player, state.lastRoll())) {
             state.setLastRoll(null);
             state.setPhase(GameState.Phase.WAITING_FOR_ROLL);
-            state.log("בזכות ה-6, " + player.name() + " מטיל/ה שוב.");
+            state.log("תור נוסף ל" + player.name() + "!");
         } else {
             passTurn();
         }
@@ -209,20 +200,12 @@ public final class GameEngine {
         state.setLegalMoves(List.of());
         state.setLastRoll(null);
         state.setPhase(GameState.Phase.GAME_OVER);
-        state.log("המשחק הסתיים. המנצח/ת: " + result.winner().name());
+        state.log("המשחק הסתיים!");
     }
 
     /** Advance to the next unfinished player. */
     private void passTurn() {
         TurnManager.passTurn(state);
-        state.log("התור של " + state.currentPlayer().name());
-    }
-
-    /** Build a short human-readable message for a committed move. */
-    private String describe(Player player, Piece piece, Move move) {
-        if (move.release()) return player.name() + " הוציא/ה את כלי " + piece.number() + " מהטירה.";
-        String text = player.name() + " הזיז/ה את כלי " + piece.number() + " " + move.steps() + " צעדים";
-        return move.partial() ? text + " ונעצר/ה לפני חסימה." : text + ".";
     }
 
     /** Publish immutable movement and interaction events before refreshing observers. */
