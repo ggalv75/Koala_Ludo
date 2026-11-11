@@ -76,8 +76,8 @@ class GameBoardViewTest {
 
             assertTrue(texts.contains("התור של דור"));
             assertTrue(texts.contains("ממתין להטלה"));
-            assertTrue(texts.contains("דור  |  בבית: 0/4"));
-            assertTrue(texts.contains("גל  |  בבית: 0/4"));
+            assertPlayerRow("דור", "0/4 בבית");
+            assertPlayerRow("גל", "0/4 בבית");
 
             JButton rollButton = findButton("roll-button");
 
@@ -216,6 +216,19 @@ class GameBoardViewTest {
             });
         }
     }
+    
+	/** Verify that a player name and finish counter appear in the same row. */
+	private void assertPlayerRow(String playerName, String expectedProgress) {
+	    JLabel nameLabel = findComponents(view, JLabel.class).stream()
+	            .filter(label -> playerName.equals(label.getText()))
+	            .findFirst()
+	            .orElseThrow(() -> new AssertionError("Player not displayed: " + playerName));
+	    Container playerRow = nameLabel.getParent();
+	    assertNotNull(nameLabel.getIcon(), "Player color icon is missing: " + playerName);
+	    assertTrue(findComponents(playerRow, JLabel.class).stream()
+	            .anyMatch(label -> expectedProgress.equals(label.getText())),
+	            "Incorrect finish counter for player: " + playerName);
+	}
 
     private List<String> labelTexts() {
         return findComponents(view, JLabel.class)
