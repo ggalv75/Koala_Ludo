@@ -16,7 +16,7 @@ final class SoundSynthesizer {
 
     /** The rattle lasts as long as the die animation, so sound and picture end together. */
     static final double DICE_SECONDS = DieFace.DURATION_MS / 1000.0;
-    static final double STEP_SECONDS = 0.11;
+    static final double STEP_SECONDS = 0.08;
     static final double GAME_OVER_SECONDS = 2.4;
 
     /** Loudness relative to full scale; music stays quiet so effects remain clear. */
@@ -69,16 +69,16 @@ final class SoundSynthesizer {
         addTone(buffer, start, 0.03, 1900 + random.nextDouble() * 900, amplitude * 0.35, 0.0005, 0.008);
     }
 
-    /** A wooden "tok": a short sine whose pitch falls, with a tiny attack transient. */
+    /** A bubble "pop": a short sine whose pitch rises quickly, then fades. */
     private static double[] step() {
         double[] buffer = new double[samples(STEP_SECONDS)];
+        double glide = 0.018;
         for (int i = 0; i < buffer.length; i++) {
             double t = i / (double) SAMPLE_RATE;
-            // Integral of a pitch falling from 880 Hz to 520 Hz, so the glide has no phase jumps.
-            double phase = 2 * Math.PI * (520 * t + 360 * 0.02 * (1 - Math.exp(-t / 0.02)));
-            buffer[i] += Math.sin(phase) * envelope(t, STEP_SECONDS, 0.002, 0.03);
+            // Integral of a pitch rising from 380 Hz to 1080 Hz, so the glide has no phase jumps.
+            double phase = 2 * Math.PI * (1080 * t - 700 * glide * (1 - Math.exp(-t / glide)));
+            buffer[i] += Math.sin(phase) * envelope(t, STEP_SECONDS, 0.002, 0.018);
         }
-        addNoise(buffer, 0, 0.006, 0.3, 11, 0.5);
         return buffer;
     }
 
