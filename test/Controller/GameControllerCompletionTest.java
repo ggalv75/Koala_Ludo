@@ -35,7 +35,9 @@ import Model.GameState;
 import Model.PlayerColor;
 import View.GameBoardView;
 import View.GameSetupView;
+import View.GameSounds;
 import View.ResultsView;
+import View.SoundEffect;
 
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
@@ -53,6 +55,18 @@ class GameControllerCompletionTest {
     private String dialogText;
     private String dialogProblem;
 
+    /** Records requested effects so the test can check the game-over sound. */
+    private final List<SoundEffect> playedSounds = new ArrayList<>();
+    private final GameSounds recordingSounds = new GameSounds() {
+        private boolean music = true;
+        private boolean effects = true;
+        @Override public void play(SoundEffect effect) { playedSounds.add(effect); }
+        @Override public boolean isMusicOn() { return music; }
+        @Override public void setMusicOn(boolean on) { music = on; }
+        @Override public boolean isEffectsOn() { return effects; }
+        @Override public void setEffectsOn(boolean on) { effects = on; }
+    };
+
     @BeforeEach
     void setUp() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
@@ -60,7 +74,7 @@ class GameControllerCompletionTest {
                     Arrays.asList(Window.getWindows())
             );
 
-            controller = new GameController();
+            controller = new GameController(recordingSounds);
             controller.start();
 
             List<JFrame> newFrames = new ArrayList<>();
@@ -154,6 +168,22 @@ class GameControllerCompletionTest {
                     frame.getContentPane()
             );
         });
+    }
+
+    @Test
+    void gameOverSoundPlaysOnceWhenResultsAppear() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            int pieceId = ControllerTestFixtures.prepareWinningMove(engine);
+            startDialogResponder();
+            assertTrue(engine.movePiece(pieceId));
+            assertFalse(playedSounds.contains(SoundEffect.GAME_OVER),
+                    "the fanfare waits until the final animation ends");
+        });
+
+        awaitDialog();
+
+        SwingUtilities.invokeAndWait(() -> assertEquals(1,
+                playedSounds.stream().filter(SoundEffect.GAME_OVER::equals).count()));
     }
 
     @Test

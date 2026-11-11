@@ -10,7 +10,8 @@ import java.util.concurrent.ThreadLocalRandom;
 /** Paints a tumbling six-sided die without changing the Model's authoritative result. */
 public final class DieFace extends JComponent {
     private static final long serialVersionUID = 1L;
-    private static final int DURATION_MS = 850;
+    /** Also sets the length of the dice sound (SoundSynthesizer). */
+    static final int DURATION_MS = 850;
     private static final int FRAME_MS = 25;
     private static final int FACE_CHANGE_MS = 76;
 
