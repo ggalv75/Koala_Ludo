@@ -53,7 +53,10 @@ public final class DieFace extends JComponent {
     public boolean isRolling() { return rolling; }
 
     /** Show the authoritative result most recently supplied by the Model. */
-    int value() { return value; }
+    public int value() { return value; }
+
+    /** Number of faces this die shows (3 for Boost, 6 otherwise). */
+    public int faces() { return faces; }
 
     /** Animate the dice first, then request exactly one real Model roll. */
     public void animateRoll(Runnable rollAction) {
