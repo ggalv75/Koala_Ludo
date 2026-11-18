@@ -76,7 +76,7 @@ public final class BoardCanvas extends JPanel {
         updateHover(-1);
         if (committedMove != null && animationsEnabled) {
             Piece piece = state.piece(committedMove.pieceId());
-            int legs = committedMove.release() ? 1 : Math.max(1, committedMove.toStep() - committedMove.fromStep());
+            int legs = legsOf(committedMove);
             long duration = committedMove.release() ? RELEASE_DURATION_NS : legs * LEG_DURATION_NS;
             motion = new Motion(committedMove, piece.color(), System.nanoTime(), duration);
             landedSquares = 0;
@@ -202,7 +202,8 @@ public final class BoardCanvas extends JPanel {
     }
 
     private static int legsOf(Move move) {
-        return move.release() ? 1 : Math.max(1, move.toStep() - move.fromStep());
+        return move.release() || move.toStep() == Piece.IN_CASTLE
+                ? 1 : Math.max(1, Math.abs(move.toStep() - move.fromStep()));
     }
 
     /** Start the player-wide celebration only after the last pawn's effects finish. */
@@ -312,7 +313,7 @@ public final class BoardCanvas extends JPanel {
 
 		Color fill = switch (c.type()) {
 		    case START, HOME -> Theme.boardPathColorOf(c.color());
-		    case SAFE -> Theme.SAFE_SOFT;
+		    case SAFE, SURPRISE -> Theme.SAFE_SOFT;
 		    case ARROW, REGULAR -> Theme.SURFACE;
 		};
 
@@ -329,6 +330,7 @@ public final class BoardCanvas extends JPanel {
                 g.setColor(Theme.SAFE);
                 g.fill(star(cx, cy, cell * 0.38, cell * 0.16));
             }
+            case SURPRISE -> drawText(g, "!", cx, cy, Theme.INK, (int) (cell * 0.7));
             case ARROW -> drawArrow(g, c.color(), cx, cy);
             default -> { }
         }
@@ -557,22 +559,26 @@ public final class BoardCanvas extends JPanel {
         Motion anim = motion;
         Move move = anim.move();
         Piece piece = state.piece(move.pieceId());
-        int legs = move.release() ? 1 : Math.max(1, move.toStep() - move.fromStep());
+        int legs = legsOf(move);
         double progress = Math.min(1.0, Math.max(0.0,
                 (double) (System.nanoTime() - anim.startedAt()) / anim.duration()));
         double travelled = progress * legs;
         int leg = Math.min(legs - 1, (int) Math.floor(travelled));
         double t = smoothstep(Math.min(1.0, travelled - leg));
 
+        int direction = Integer.compare(move.toStep(), move.fromStep());
         Point a = (move.release() && leg == 0)
                 ? castleSlot(board, piece)
-                : anchor(board, piece, move.fromStep() + leg);
-        Point b = anchor(board, piece, move.release() ? 0 : move.fromStep() + leg + 1);
+                : anchor(board, piece, move.fromStep() + leg * direction);
+        Point b = anchor(board, piece,
+                move.release() ? 0 : move.toStep() == Piece.IN_CASTLE
+                        ? Piece.IN_CASTLE : move.fromStep() + (leg + 1) * direction);
         int x = (int) Math.round(a.x + (b.x - a.x) * t);
         int y = (int) Math.round(a.y + (b.y - a.y) * t - Math.sin(t * Math.PI) * cell * 0.15);
         int trackRadius = Math.max(5, (int) (cell * 0.34));
         int startRadius = move.release() ? (int) (cell * 0.55) : trackRadius;
-        int endRadius = state.isFinished(piece) ? Math.max(5, (int) (cell * 0.2)) : trackRadius;
+        int endRadius = move.toStep() == Piece.IN_CASTLE ? (int) (cell * 0.55)
+                : move.toStep() == board.finishStep() ? Math.max(5, (int) (cell * 0.2)) : trackRadius;
         double sizeProgress = progress;
         int radius = (int) Math.round(startRadius + (endRadius - startRadius) * sizeProgress);
         // Suppress clickable hitboxes while the move is animating.
@@ -761,3 +767,4 @@ public final class BoardCanvas extends JPanel {
         return path;
     }
 }
+

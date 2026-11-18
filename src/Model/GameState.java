@@ -7,7 +7,8 @@ import java.util.*;
  * only classes of the Model package change the state.
  */
 public final class GameState {
-    public enum Phase { WAITING_FOR_ROLL, WAITING_FOR_MOVE, GAME_OVER }
+    public enum Phase { WAITING_FOR_ROLL, WAITING_FOR_MOVE, RESOLVING_EFFECTS,
+        WAITING_FOR_SURPRISE_CHOICE, GAME_OVER }
 
     private static final int LOG_SIZE = 40;
     private final Board board;
@@ -133,3 +134,4 @@ public final class GameState {
         while (log.size() > LOG_SIZE) log.removeLast();
     }
 }
+

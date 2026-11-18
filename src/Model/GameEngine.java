@@ -16,6 +16,9 @@ public final class GameEngine {
     /** Template Method: the UltraBoost surprise throw (FR-21), the same at every level. */
     private final DiceThrow surpriseThrow;
     private final GameClock gameClock;
+    private final Dice dice;
+    private final SurpriseSelector surpriseSelector;
+    private final List<Runnable> pendingNotifications = new ArrayList<>();
     private final List<GameListener> listeners = new ArrayList<>();
 
     /** Initialize a game with validated players and deterministic dependencies. */
@@ -26,17 +29,27 @@ public final class GameEngine {
     /** Full constructor; random sources and the clock are injected so tests are repeatable. */
     GameEngine(Difficulty difficulty, List<String> names, List<PlayerColor> colors,
                Random boardRandom, Dice dice, Clock clock) {
-        SetupValidator.validate(difficulty, names, colors).ifPresent(message -> {
+        this(BoardFactory.create(difficulty, boardRandom), names, colors,
+                dice, clock, new SurpriseSelector());
+    }
+
+    /** Inject a configured board and random sources for repeatable integration tests. */
+    GameEngine(Board board, List<String> names, List<PlayerColor> colors,
+               Dice dice, Clock clock, SurpriseSelector surpriseSelector) {
+        Objects.requireNonNull(board, "board");
+        SetupValidator.validate(board.difficulty(), names, colors).ifPresent(message -> {
             throw new IllegalArgumentException(message);
         });
         List<Player> players = new ArrayList<>();
         for (int i = 0; i < names.size(); i++) {
             players.add(new Player(i, names.get(i).trim(), colors.get(i)));
         }
-        this.state = new GameState(BoardFactory.create(difficulty, boardRandom), players);
-        this.regularThrow = DiceThrow.regularFor(difficulty.multiplierDie(), dice);
+        this.state = new GameState(board, players);
+        this.dice = Objects.requireNonNull(dice, "dice");
+        this.surpriseSelector = Objects.requireNonNull(surpriseSelector, "surpriseSelector");
+        this.regularThrow = DiceThrow.regularFor(board.difficulty().multiplierDie(), dice);
         this.surpriseThrow = new SurpriseUltraBoostThrow(dice);
-        this.gameClock = new GameClock(clock);
+        this.gameClock = new GameClock(Objects.requireNonNull(clock, "clock"));
         state.log("המשחק התחיל!");
     }
 
@@ -98,6 +111,9 @@ public final class GameEngine {
 
     /** Reject illegal selections or commit exactly one approved move. */
     public boolean movePiece(int pieceId) {
+        if (state.phase() == GameState.Phase.WAITING_FOR_SURPRISE_CHOICE) {
+            return selectSurpriseOpponentPiece(pieceId);
+        }
         if (state.phase() != GameState.Phase.WAITING_FOR_MOVE) {
             rejectAction("הטל קובייה לפני בחירת כלי.");
             return false;
@@ -112,36 +128,190 @@ public final class GameEngine {
         return true;
     }
 
-    /** Apply one validated move and record its interaction effects for the View. */
-    private void apply(Move move) {
-        Player player = state.currentPlayer();
+    /** Accept only an opponent move offered by the pending surprise. */
+    public boolean selectSurpriseOpponentPiece(int pieceId) {
+        if (state.phase() != GameState.Phase.WAITING_FOR_SURPRISE_CHOICE) {
+            rejectAction("אין כרגע בחירת כלי יריב.");
+            return false;
+        }
+        Optional<Move> move = state.legalMoves().stream()
+                .filter(candidate -> candidate.pieceId() == pieceId).findFirst();
+        if (move.isEmpty()) {
+            rejectAction("בחר כלי יריב מסומן.");
+            return false;
+        }
+        int roll = dice.roll().value();
+        int steps = (roll + 1) / 2;
+        Optional<Move> actualMove = SurpriseMovement.backward(state, pieceId, steps);
+        if (actualMove.isEmpty()) {
+            rejectAction("לא ניתן להזיז את הכלי שנבחר.");
+            return false;
+        }
+        state.log("קוביית ההפתעה: " + roll + " — תנועה לאחור: " + steps);
+        state.setFeedbackMessage(null);
+        apply(actualMove.get());
+        return true;
+    }
+
+    /** Resolve movements and chained surprises before completing the active turn. */
+    private void apply(Move firstMove) {
+        Player activePlayer = state.currentPlayer();
+        state.setPhase(GameState.Phase.RESOLVING_EFFECTS);
+        Move nextMove = firstMove;
+
+        // Iteration avoids growing the Java call stack for chained surprises.
+        while (nextMove != null) {
+            Move move = nextMove;
+            MovementOutcome outcome = commitMovement(move);
+            pendingNotifications.add(() -> publishMovement(move, outcome));
+            Piece piece = state.piece(move.pieceId());
+
+            if (RankingManager.isGameOver(state)) {
+                endGame();
+                flushNotifications();
+                return;
+            }
+
+            Cell landing = state.board().cellAt(piece.color(), piece.step());
+            if (landing == null || landing.type() != CellType.SURPRISE) break;
+
+            SurpriseType type = surpriseSelector.draw();
+            SurpriseEvent event = new SurpriseEvent(
+                    activePlayer.index(), piece.id(), type);
+            state.log("הפתעה: " + type.displayName());
+            pendingNotifications.add(() -> {
+                for (GameListener listener : List.copyOf(listeners)) {
+                    listener.onSurpriseDrawn(event);
+                }
+            });
+
+            nextMove = switch (type) {
+                case DIRECT_FINISH ->
+                        SurpriseMovement.directFinish(state, piece.id()).orElse(null);
+                case RETURN_TO_CASTLE ->
+                        SurpriseMovement.returnToCastle(state, piece.id()).orElse(null);
+                case MOVE_BACKWARD_THREE ->
+                        SurpriseMovement.backward(state, piece.id(), 3).orElse(null);
+                case LOSE_NEXT_TURN -> {
+                    TurnManager.loseNextTurn(state, activePlayer);
+                    yield null;
+                }
+                case ULTRA_BOOST_ROLL -> {
+                    TurnManager.grantSpecialRoll(state);
+                    yield null;
+                }
+                case MOVE_OPPONENT_BACKWARD -> {
+                    offerOpponentMoves(activePlayer);
+                    yield null;
+                }
+            };
+
+            if (state.phase() == GameState.Phase.WAITING_FOR_SURPRISE_CHOICE) {
+                flushNotifications();
+                return;
+            }
+        }
+
+        endTurnAfterMove(activePlayer, activePlayer.isFinished());
+        flushNotifications();
+    }
+
+    /** Offer movable opposing pawns; the ordinary die is rolled only after selection. */
+    private void offerOpponentMoves(Player activePlayer) {
+        List<Move> options = new ArrayList<>();
+        for (Piece candidate : state.pieces()) {
+            if (candidate.ownerIndex() == activePlayer.index()) continue;
+            if (state.players().get(candidate.ownerIndex()).isFinished()) continue;
+            SurpriseMovement.backward(state, candidate.id(), 1).ifPresent(options::add);
+        }
+        if (options.isEmpty()) {
+            state.log("ההפתעה בוטלה: אין כלי יריב שניתן להזיז.");
+            return;
+        }
+        state.setLegalMoves(options);
+        state.setPhase(GameState.Phase.WAITING_FOR_SURPRISE_CHOICE);
+        state.setFeedbackMessage("בחר כלי יריב מסומן להזזה לאחור.");
+    }
+
+    /** Publish the committed movement before the next surprise in the event sequence. */
+    private void publishMovement(Move move, MovementOutcome outcome) {
+        for (GameListener listener : List.copyOf(listeners)) listener.onPieceMoved(move);
+        if (outcome.interaction().hasVisualEffect()) {
+            for (GameListener listener : List.copyOf(listeners)) {
+                listener.onPieceInteraction(outcome.interaction());
+            }
+        }
+        if (outcome.playerFinish() != null) {
+            for (GameListener listener : List.copyOf(listeners)) {
+                listener.onPlayerFinished(outcome.playerFinish());
+            }
+        }
+    }
+
+    /** Refresh observers only after reaching a stable state or awaiting a choice. */
+    private void flushNotifications() {
+        List<Runnable> notifications = List.copyOf(pendingNotifications);
+        pendingNotifications.clear();
+        for (Runnable notification : notifications) notification.run();
+        notifyChanged();
+        if (state.phase() == GameState.Phase.GAME_OVER) {
+            for (GameListener listener : List.copyOf(listeners)) {
+                listener.onGameOver(state.result());
+            }
+        }
+    }
+
+    /**
+     * Commit one already validated movement and calculate its events.
+     * Does not pass the turn or publish notifications: landing effects must
+     * finish before the engine decides who plays next.
+     */
+    private MovementOutcome commitMovement(Move move) {
         Piece piece = state.piece(move.pieceId());
+        Player owner = state.players().get(piece.ownerIndex());
         Position from = state.positionOf(piece);
         Position to = state.board().positionOf(piece.color(), move.toStep());
         Map<Position, Set<Integer>> before = snapshotBlocks(from, to);
+
         piece.moveTo(move.toStep());
         state.setLegalMoves(List.of());
+
         PieceInteractionEvent.Capture capture = null;
         Optional<Piece> captured = InteractionRules.capturableOpponent(state, piece);
         if (captured.isPresent()) {
             Piece victim = captured.get();
             capture = new PieceInteractionEvent.Capture(victim.id(), to);
             victim.returnToCastle();
-            state.log(player.name() + " אכל כלי של " + state.players().get(victim.ownerIndex()).name() + "!");
+            state.log(owner.name() + " אכל כלי של "
+                    + state.players().get(victim.ownerIndex()).name() + "!");
         }
-        Position protection = InteractionRules.sharesProtectedSquareWithOpponent(state, piece) ? to : null;
-        Position blockedBy = move.partial() ? state.board().positionOf(piece.color(), move.toStep() + 1) : null;
-        PieceInteractionEvent interaction = new PieceInteractionEvent(capture, protection, blockedBy, changesToBlocks(before));
+
+        Position protection =
+                InteractionRules.sharesProtectedSquareWithOpponent(state, piece)
+                        ? to : null;
+
+        Position blockedBy = null;
+        if (move.partial()) {
+            int direction = Integer.compare(move.toStep(), move.fromStep());
+            blockedBy = state.board().positionOf(
+                    piece.color(), move.toStep() + direction);
+        }
+
+        PieceInteractionEvent interaction = new PieceInteractionEvent(
+                capture, protection, blockedBy, changesToBlocks(before));
+
         if (state.isFinished(piece)) {
-            state.log(player.name() + " הכניס כלי לבית הסיום!");
+            state.log(owner.name() + " הכניס כלי לבית הסיום!");
         }
-        PlayerFinishEvent playerFinish = rankIfAllPiecesHome(player);
-        boolean gameOver = endTurnAfterMove(player, playerFinish != null);
-        notifyMoved(move, interaction, playerFinish);
-        if (gameOver) {
-            for (GameListener listener : List.copyOf(listeners)) listener.onGameOver(state.result());
-        }
+
+        PlayerFinishEvent playerFinish = rankIfAllPiecesHome(owner);
+        return new MovementOutcome(interaction, playerFinish);
     }
+
+    /** Movement events retained until the engine is ready to publish them. */
+    private record MovementOutcome(
+            PieceInteractionEvent interaction,
+            PlayerFinishEvent playerFinish) { }
 
     /** FR-45: ranks the player when all four pieces are home. Returns the finish event, or null. */
     private PlayerFinishEvent rankIfAllPiecesHome(Player player) {
@@ -221,18 +391,6 @@ public final class GameEngine {
     /** Advance to the next unfinished player. */
     private void passTurn() {
         TurnManager.passTurn(state);
-    }
-
-    /** Publish immutable movement and interaction events before refreshing observers. */
-    private void notifyMoved(Move move, PieceInteractionEvent interaction, PlayerFinishEvent playerFinish) {
-        for (GameListener listener : List.copyOf(listeners)) listener.onPieceMoved(move);
-        if (interaction.hasVisualEffect()) {
-            for (GameListener listener : List.copyOf(listeners)) listener.onPieceInteraction(interaction);
-        }
-        if (playerFinish != null) {
-            for (GameListener listener : List.copyOf(listeners)) listener.onPlayerFinished(playerFinish);
-        }
-        notifyChanged();
     }
 
     /** Notify every registered observer of the current authoritative state. */
