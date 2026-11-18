@@ -26,6 +26,8 @@ public final class BoardCanvas extends JPanel {
     private static final long PLAYER_FINISH_DURATION_NS = 2_200_000_000L;
 
     private GameState state;
+    private Map<Integer, Integer> displayedSteps = Map.of();
+    private boolean interactionBlocked;
     private final IntConsumer onPieceClick;
     private final List<DrawnPiece> drawnPieces = new ArrayList<>();
     private final javax.swing.Timer effectsTimer;
@@ -72,7 +74,14 @@ public final class BoardCanvas extends JPanel {
     /** Render a new state and queue its movement, interaction and earned-rank effects. */
     public void setState(GameState state, Move committedMove, PieceInteractionEvent interaction,
                          PlayerFinishEvent finishedPlayer) {
+        setState(state, committedMove, interaction, finishedPlayer, Map.of());
+    }
+
+    /** Render a visual snapshot without mutating the authoritative Model. */
+    void setState(GameState state, Move committedMove, PieceInteractionEvent interaction,
+                  PlayerFinishEvent finishedPlayer, Map<Integer, Integer> visualSteps) {
         this.state = Objects.requireNonNull(state);
+        displayedSteps = Map.copyOf(visualSteps);
         updateHover(-1);
         if (committedMove != null && animationsEnabled) {
             Piece piece = state.piece(committedMove.pieceId());
@@ -218,14 +227,16 @@ public final class BoardCanvas extends JPanel {
     /** Run the render timer only while a visible effect is needed. */
     private void updateTimer() {
         boolean shouldRun = isBusy() || (animationsEnabled && state != null
-                && state.phase() == GameState.Phase.WAITING_FOR_MOVE && !state.legalMoves().isEmpty());
+                && !interactionBlocked && (state.phase() == GameState.Phase.WAITING_FOR_MOVE
+                    || state.phase() == GameState.Phase.WAITING_FOR_SURPRISE_CHOICE)
+                && !state.legalMoves().isEmpty());
         if (shouldRun && !effectsTimer.isRunning()) effectsTimer.start();
         if (!shouldRun && effectsTimer.isRunning()) effectsTimer.stop();
     }
 
     /** Forward a clicked piece to the Controller when no animation is playing. */
     private void handleClick(Point point) {
-        if (isBusy()) return;
+        if (isBusy() || interactionBlocked) return;
         DrawnPiece firstHit = null;
         for (int i = drawnPieces.size() - 1; i >= 0; i--) {
             DrawnPiece piece = drawnPieces.get(i);
@@ -242,7 +253,9 @@ public final class BoardCanvas extends JPanel {
 
     /** Preview the actual legal move of the pawn under the pointer. */
     private void handleHover(Point point) {
-        if (isBusy() || state == null || state.phase() != GameState.Phase.WAITING_FOR_MOVE) {
+        if (isBusy() || interactionBlocked || state == null
+                || (state.phase() != GameState.Phase.WAITING_FOR_MOVE
+                    && state.phase() != GameState.Phase.WAITING_FOR_SURPRISE_CHOICE)) {
             updateHover(-1);
             return;
         }
@@ -340,9 +353,9 @@ public final class BoardCanvas extends JPanel {
     private void drawBlocks(Graphics2D g) {
         Map<Position, Set<Integer>> blocks = new LinkedHashMap<>();
         for (Piece piece : state.pieces()) {
-            Position square = state.positionOf(piece);
+            Position square = displayPosition(piece);
             if (square != null && !blocks.containsKey(square)) {
-                blocks.put(square, new TreeSet<>(InteractionRules.blockOwners(state, square)));
+                blocks.put(square, new TreeSet<>(visualBlockOwners(square)));
             }
         }
         // During travel, preserve the pre-move block display until the pawn arrives.
@@ -401,18 +414,18 @@ public final class BoardCanvas extends JPanel {
             boolean hideMoving = motion != null && motion.move().pieceId() == piece.id();
             boolean hideCaptured = capturedPieceStillAnimating(piece.id());
             if (hideCaptured) continue;
-            if (piece.isInCastle()) {
+            if (displayStep(piece) == Piece.IN_CASTLE) {
                 Rectangle r = rect(board.castleCorner(piece.color()));
                 int index = piece.number() - 1;
                 int x = (int) (r.x + cell * (1.9 + (index % 2) * 2.2));
                 int y = (int) (r.y + cell * (1.9 + (index / 2) * 2.2));
                 if (!hideMoving) drawPiece(g, piece, x, y, (int) (cell * 0.55));
-            } else if (state.isFinished(piece)) {
+            } else if (isVisuallyFinished(piece)) {
                 int k = finishedCount.merge(piece.color(), 1, Integer::sum) - 1;
                 Point p = finishSpot(board, piece.color(), k);
                 if (!hideMoving) drawPiece(g, piece, p.x, p.y, (int) Math.max(5, cell * 0.2));
             } else if (!hideMoving) {
-                onSquares.computeIfAbsent(state.positionOf(piece), key -> new ArrayList<>()).add(piece);
+                onSquares.computeIfAbsent(displayPosition(piece), key -> new ArrayList<>()).add(piece);
             }
         }
         onSquares.forEach((position, group) -> {
@@ -509,7 +522,7 @@ public final class BoardCanvas extends JPanel {
     /** Paint a numbered koala piece with its pulsing legal-move highlight. */
     private void drawPiece(Graphics2D g, Piece piece, int x, int y, int radius) {
         drawnPieces.add(new DrawnPiece(piece.id(), x, y, radius));
-        if (!isBusy() && state.canMove(piece)) {
+        if (!isBusy() && !interactionBlocked && state.canMove(piece)) {
             double pulse = animationsEnabled ? 0.5 + 0.5 * Math.sin(System.nanoTime() / 215_000_000.0) : 0.5;
             int reach = 4 + (int) Math.round(pulse * 4);
             int alpha = 75 + (int) Math.round(pulse * 75);
@@ -527,7 +540,7 @@ public final class BoardCanvas extends JPanel {
 
     /** A translucent preview follows only the actual legal Move supplied by MoveValidator. */
     private void drawPathPreview(Graphics2D g, Board board) {
-        if (hoveredPieceId < 0 || isBusy() || state.phase() != GameState.Phase.WAITING_FOR_MOVE) return;
+        if (hoveredPieceId < 0 || isBusy() || interactionBlocked || state.phase() != GameState.Phase.WAITING_FOR_MOVE) return;
         Move candidate = null;
         for (Move move : state.legalMoves()) {
             if (move.pieceId() == hoveredPieceId) { candidate = move; break; }
@@ -609,7 +622,7 @@ public final class BoardCanvas extends JPanel {
     private int finishedIndex(Piece piece) {
         int index = 0;
         for (Piece other : state.pieces()) {
-            if (other.color() == piece.color() && state.isFinished(other)) {
+            if (other.color() == piece.color() && isVisuallyFinished(other)) {
                 if (other.id() == piece.id()) return index;
                 index++;
             }
@@ -707,6 +720,41 @@ public final class BoardCanvas extends JPanel {
                 y + height * 85 / 100, winnerColor, Math.max(18, Math.min(26, width / 17)));
     }
 
+
+    /** Suppress selection while the View is playing a complete event sequence. */
+    void setInteractionBlocked(boolean blocked) {
+        interactionBlocked = blocked;
+        if (blocked) updateHover(-1);
+        updateTimer();
+        repaint();
+    }
+
+    private int displayStep(Piece piece) {
+        return displayedSteps.getOrDefault(piece.id(), piece.step());
+    }
+
+    private Position displayPosition(Piece piece) {
+        return state.board().positionOf(piece.color(), displayStep(piece));
+    }
+
+    private boolean isVisuallyFinished(Piece piece) {
+        return displayStep(piece) >= state.board().finishStep();
+    }
+
+    private Set<Integer> visualBlockOwners(Position square) {
+        Map<Integer, Integer> counts = new HashMap<>();
+        for (Piece piece : state.pieces()) {
+            if (square.equals(displayPosition(piece))) {
+                counts.merge(piece.ownerIndex(), 1, Integer::sum);
+            }
+        }
+        Set<Integer> owners = new TreeSet<>();
+        counts.forEach((owner, count) -> {
+            if (count >= 2) owners.add(owner);
+        });
+        return owners;
+    }
+
     /** Smooth progress for movement and interaction transitions. */
     private static double smoothstep(double t) { return t * t * (3.0 - 2.0 * t); }
 
@@ -767,4 +815,5 @@ public final class BoardCanvas extends JPanel {
         return path;
     }
 }
+
 

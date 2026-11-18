@@ -5,6 +5,11 @@ import Model.*;
 import javax.swing.*;
 import java.awt.*;
 import java.util.List;
+import java.util.ArrayList;
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.Map;
+import java.util.HashMap;
 import java.util.Objects;
 import java.util.function.IntConsumer;
 import java.util.function.LongSupplier;
@@ -30,9 +35,29 @@ public final class GameBoardView extends JPanel implements GameListener {
     private final LongSupplier elapsedSeconds;
     private final Timer clockTimer;
     private GameState displayedState;
-    private Move pendingMove;
-    private PieceInteractionEvent pendingInteraction;
-    private PlayerFinishEvent pendingPlayerFinish;
+    private final List<VisualEvent> pendingVisualEvents = new ArrayList<>();
+    private final Deque<VisualFrame> visualFrames = new ArrayDeque<>();
+    private final List<Runnable> afterVisualSequence = new ArrayList<>();
+    private MovementVisual lastMovement;
+    private boolean visualSequenceRunning;
+    private Timer surpriseTimer;
+    private final JLabel surpriseInfo = Theme.label("", 14, true);
+    private JPanel surpriseCard;
+
+    private interface VisualEvent { }
+
+    private static final class MovementVisual implements VisualEvent {
+        private final Move move;
+        private PieceInteractionEvent interaction;
+        private PlayerFinishEvent playerFinish;
+
+        private MovementVisual(Move move) { this.move = move; }
+    }
+
+    private record SurpriseVisual(SurpriseEvent event) implements VisualEvent { }
+
+    private record VisualFrame(GameState state, VisualEvent event,
+                               Map<Integer, Integer> steps) { }
     private boolean animationsEnabled = true;
     private final GameSounds sounds;
 
@@ -46,7 +71,9 @@ public final class GameBoardView extends JPanel implements GameListener {
                          GameSounds sounds) {
         this.elapsedSeconds = elapsedSeconds;
         this.sounds = Objects.requireNonNull(sounds);
-        this.canvas = new BoardCanvas(onPieceClick);
+        this.canvas = new BoardCanvas(pieceId -> {
+            if (!visualSequenceRunning) onPieceClick.accept(pieceId);
+        });
         canvas.setOnSquareLanded(() -> sounds.play(SoundEffect.STEP));
         canvas.setBackground(new Color(245, 238, 219));
         canvas.setOpaque(true);
@@ -103,7 +130,13 @@ public final class GameBoardView extends JPanel implements GameListener {
         animations.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
         animations.addActionListener(e -> {
             animationsEnabled = animations.isSelected();
+            boolean waitingOnSurprise = surpriseTimer != null;
+            if (!animationsEnabled && surpriseTimer != null) {
+                surpriseTimer.stop();
+                surpriseTimer = null;
+            }
             canvas.setAnimationsEnabled(animationsEnabled);
+            if (!animationsEnabled && waitingOnSurprise) advanceVisualSequence();
             if (!animationsEnabled) {
                 die.finishRollAnimation();
                 multiplierDie.finishRollAnimation();
@@ -151,6 +184,15 @@ public final class GameBoardView extends JPanel implements GameListener {
         diceBottom.add(status, BorderLayout.SOUTH);
         dice.add(diceBottom, BorderLayout.SOUTH);
         side.add(fullWidth(dice, 202));
+        side.add(Box.createVerticalStrut(10));
+        surpriseCard = roundedPanel(new BorderLayout(), new Color(255, 248, 221), Theme.KOALA_BORDER);
+        surpriseInfo.setName("surprise-info");
+        surpriseInfo.setHorizontalAlignment(SwingConstants.RIGHT);
+        surpriseInfo.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
+        surpriseInfo.setForeground(Theme.KOALA_PRIMARY_DARK);
+        surpriseCard.add(surpriseInfo, BorderLayout.CENTER);
+        surpriseCard.setVisible(false);
+        side.add(fullWidth(surpriseCard, 100));
         side.add(Box.createVerticalStrut(10));
         playersCard = roundedPanel(new BorderLayout(0, 8), new Color(255, 254, 250), Theme.KOALA_BORDER);
         JLabel playersTitle = Theme.label("שחקנים", 16, true);
@@ -219,35 +261,43 @@ public final class GameBoardView extends JPanel implements GameListener {
         return component;
     }
 
-    /** Stores the committed move for the next board animation. */
+    /** Preserve every committed movement in the order published by the Model. */
     @Override
     public void onPieceMoved(Move move) {
-        pendingMove = move;
+        lastMovement = new MovementVisual(Objects.requireNonNull(move));
+        pendingVisualEvents.add(lastMovement);
     }
 
-    /** Stores capture, protection and blocking effects until the next state update. */
     @Override
     public void onPieceInteraction(PieceInteractionEvent event) {
-        pendingInteraction = event;
+        ensureMovementVisual().interaction = event;
     }
 
-    /** Stores the player-finish event for the completion animation. */
     @Override
     public void onPlayerFinished(PlayerFinishEvent event) {
-        pendingPlayerFinish = event;
+        ensureMovementVisual().playerFinish = event;
+    }
+
+    /** Observer callback: present the surprise after the movement that triggered it. */
+    @Override
+    public void onSurpriseDrawn(SurpriseEvent event) {
+        pendingVisualEvents.add(new SurpriseVisual(Objects.requireNonNull(event)));
+        lastMovement = null;
+    }
+
+    private MovementVisual ensureMovementVisual() {
+        if (lastMovement == null) {
+            lastMovement = new MovementVisual(null);
+            pendingVisualEvents.add(lastMovement);
+        }
+        return lastMovement;
     }
 
     /** Refreshes the board and sidebar from the latest game state. */
     @Override
     public void onStateChanged(GameState state) {
         displayedState = state;
-        // With animations off there is no walk to follow, so the move gets a single step sound.
-        if (pendingMove != null && !animationsEnabled) sounds.play(SoundEffect.STEP);
-        canvas.setState(state, pendingMove, pendingInteraction, pendingPlayerFinish);
-        pendingMove = null;
-        pendingInteraction = null;
-        pendingPlayerFinish = null;
-        if (canvas.isBusy()) canvas.whenEffectsFinish(this::updateRollButton);
+        enqueueVisualFrames(state);
         clock.setText(GameClock.format(elapsedSeconds.getAsLong()));
         level.setText("רמת קושי: " + state.difficulty().displayName());
         Player current = state.currentPlayer();
@@ -265,6 +315,107 @@ public final class GameBoardView extends JPanel implements GameListener {
         log.setText(buildLogText(state));
         log.setCaretPosition(0);
         log.applyComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
+    }
+
+
+    /**
+     * Reconstruct intermediate piece positions from the final state and ordered
+     * movement/capture events. These maps belong to the View only.
+     */
+    private void enqueueVisualFrames(GameState state) {
+        if (pendingVisualEvents.isEmpty()) {
+            if (!visualSequenceRunning) canvas.setState(state);
+            return;
+        }
+        List<VisualEvent> events = List.copyOf(pendingVisualEvents);
+        pendingVisualEvents.clear();
+        lastMovement = null;
+        Map<Integer, Integer> steps = new HashMap<>();
+        for (Piece piece : state.pieces()) steps.put(piece.id(), piece.step());
+
+        for (int i = events.size() - 1; i >= 0; i--) {
+            if (!(events.get(i) instanceof MovementVisual movement)) continue;
+            if (movement.interaction != null && movement.interaction.capture() != null) {
+                PieceInteractionEvent.Capture capture = movement.interaction.capture();
+                Piece victim = state.piece(capture.pieceId());
+                int previousStep = state.board().route(victim.color()).indexOf(capture.square());
+                steps.put(victim.id(), previousStep);
+            }
+            if (movement.move != null) {
+                steps.put(movement.move.pieceId(), movement.move.fromStep());
+            }
+        }
+
+        for (VisualEvent event : events) {
+            if (event instanceof MovementVisual movement) {
+                if (movement.move != null) {
+                    steps.put(movement.move.pieceId(), movement.move.toStep());
+                }
+                if (movement.interaction != null && movement.interaction.capture() != null) {
+                    steps.put(movement.interaction.capture().pieceId(), Piece.IN_CASTLE);
+                }
+            }
+            visualFrames.addLast(new VisualFrame(state, event, Map.copyOf(steps)));
+        }
+        if (!visualSequenceRunning) {
+            visualSequenceRunning = true;
+            canvas.setInteractionBlocked(true);
+            advanceVisualSequence();
+        }
+    }
+
+    /** Play each movement and surprise once, without allowing input between frames. */
+    private void advanceVisualSequence() {
+        while (!visualFrames.isEmpty()) {
+            VisualFrame frame = visualFrames.removeFirst();
+            if (frame.event() instanceof SurpriseVisual surprise) {
+                canvas.setState(frame.state(), null, null, null, frame.steps());
+                showSurprise(surprise.event(), frame.state());
+                if (animationsEnabled) {
+                    surpriseTimer = new Timer(1100, event -> {
+                        Timer source = (Timer) event.getSource();
+                        source.stop();
+                        if (source != surpriseTimer) return;
+                        surpriseTimer = null;
+                        advanceVisualSequence();
+                    });
+                    surpriseTimer.setRepeats(false);
+                    surpriseTimer.start();
+                    updateRollButton();
+                    return;
+                }
+                continue;
+            }
+            MovementVisual movement = (MovementVisual) frame.event();
+            if (movement.move != null && !animationsEnabled) sounds.play(SoundEffect.STEP);
+            canvas.setState(frame.state(), movement.move, movement.interaction,
+                    movement.playerFinish, frame.steps());
+            if (canvas.isBusy()) {
+                canvas.whenEffectsFinish(this::advanceVisualSequence);
+                updateRollButton();
+                return;
+            }
+        }
+        visualSequenceRunning = false;
+        if (displayedState != null) canvas.setState(displayedState);
+        canvas.setInteractionBlocked(false);
+        updateRollButton();
+        List<Runnable> callbacks = List.copyOf(afterVisualSequence);
+        afterVisualSequence.clear();
+        for (Runnable callback : callbacks) callback.run();
+    }
+
+    private void showSurprise(SurpriseEvent event, GameState state) {
+        String player = state.players().get(event.playerIndex()).name();
+        String text = "הפתעה ל" + player + ": " + event.type().displayName();
+        if (event.type() == SurpriseType.MOVE_OPPONENT_BACKWARD
+                && state.phase() == GameState.Phase.WAITING_FOR_SURPRISE_CHOICE) {
+            text += "\nבחר כלי יריב מסומן על הלוח.";
+        }
+        surpriseInfo.setText("<html><div dir='rtl' style='width:250px'>"
+                + Dialogs.escape(text).replace("\n", "<br>") + "</div></html>");
+        surpriseInfo.setToolTipText(text);
+        surpriseCard.setVisible(true);
     }
 
     /** Returns the active roll result or the most recent completed roll. */
@@ -336,7 +487,8 @@ public final class GameBoardView extends JPanel implements GameListener {
 
     /** Plays the dice animation before requesting a roll from the Controller. */
     private void startVisualRoll(Runnable onRoll) {
-        if (displayedState == null || displayedState.phase() != GameState.Phase.WAITING_FOR_ROLL || canvas.isBusy() || die.isRolling()) return;
+        if (displayedState == null || displayedState.phase() != GameState.Phase.WAITING_FOR_ROLL || visualSequenceRunning || canvas.isBusy() || die.isRolling()) return;
+        surpriseCard.setVisible(false);
         sounds.play(SoundEffect.DICE_ROLL);
         if (!animationsEnabled) {
             onRoll.run();
@@ -403,14 +555,16 @@ public final class GameBoardView extends JPanel implements GameListener {
 
     /** Enables dice rolling only when the game and animations allow it. */
     private void updateRollButton() {
-        rollButton.setEnabled(displayedState != null && displayedState.phase() == GameState.Phase.WAITING_FOR_ROLL && !canvas.isBusy() && !die.isRolling());
+        rollButton.setEnabled(displayedState != null && displayedState.phase() == GameState.Phase.WAITING_FOR_ROLL && !visualSequenceRunning && !canvas.isBusy() && !die.isRolling());
         boolean special = displayedState != null && displayedState.specialRollPending();
         rollButton.setText(die.isRolling() ? "הקובייה מתגלגלת..." : special ? "הטלה מיוחדת - UltraBoost" : "הטלת קובייה");
     }
 
     /** Runs the continuation after all board visual effects finish. */
     public void whenVisualEffectsFinish(Runnable continuation) {
-        canvas.whenEffectsFinish(continuation);
+        Objects.requireNonNull(continuation);
+        if (visualSequenceRunning) afterVisualSequence.add(continuation);
+        else canvas.whenEffectsFinish(continuation);
     }
 
     /** Stops the clock timer, dice animation and board effects. */
@@ -418,6 +572,15 @@ public final class GameBoardView extends JPanel implements GameListener {
         clockTimer.stop();
         die.cancelRollAnimation();
         multiplierDie.cancelRollAnimation();
+        if (surpriseTimer != null) surpriseTimer.stop();
+        surpriseTimer = null;
+        visualFrames.clear();
+        pendingVisualEvents.clear();
+        afterVisualSequence.clear();
+        lastMovement = null;
+        visualSequenceRunning = false;
+        canvas.setInteractionBlocked(false);
         canvas.stopEffects();
     }
 }
+
