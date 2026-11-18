@@ -4,6 +4,7 @@ package View;
 import Model.*;
 import javax.swing.*;
 import java.awt.*;
+import java.util.List;
 import java.util.Objects;
 import java.util.function.IntConsumer;
 import java.util.function.LongSupplier;
@@ -15,7 +16,12 @@ public final class GameBoardView extends JPanel implements GameListener {
     private final JLabel level = Theme.label("", 14, false);
     private final JLabel turn = Theme.label("", 18, true);
     private final DieFace die = new DieFace();
+    /** Boost / UltraBoost die, shown only when the throw has one (FR-15, FR-21). */
+    private final DieFace multiplierDie = new DieFace();
     private final JLabel rollInfo = Theme.label("", 14, false);
+    /** FR-15, FR-16: multiplier die value and steps on the track; hidden when there is no multiplier. */
+    private final JLabel multiplierInfo = Theme.label("", 13, false);
+    private final JLabel trackStepsInfo = Theme.label("", 13, false);
     private final JButton rollButton = Theme.button("הטלת קובייה", true);
     private final JLabel status = Theme.label("", 14, false);
     private final JPanel playersList = new JPanel(new GridLayout(0, 1, 0, 6));
@@ -98,7 +104,10 @@ public final class GameBoardView extends JPanel implements GameListener {
         animations.addActionListener(e -> {
             animationsEnabled = animations.isSelected();
             canvas.setAnimationsEnabled(animationsEnabled);
-            if (!animationsEnabled) die.finishRollAnimation();
+            if (!animationsEnabled) {
+                die.finishRollAnimation();
+                multiplierDie.finishRollAnimation();
+            }
             updateRollButton();
         });
         info.add(animations, BorderLayout.SOUTH);
@@ -111,10 +120,19 @@ public final class GameBoardView extends JPanel implements GameListener {
         dice.add(diceTitle, BorderLayout.NORTH);
         JPanel dieRow = new JPanel(new BorderLayout(8, 0));
         dieRow.setOpaque(false);
-        rollInfo.setForeground(Theme.KOALA_MUTED);
-        rollInfo.setHorizontalAlignment(SwingConstants.RIGHT);
-        dieRow.add(die, BorderLayout.CENTER);
-        dieRow.add(rollInfo, BorderLayout.EAST);
+        // BoxLayout skips hidden components, so at Easy the step die keeps the whole width.
+        JPanel diceFaces = new JPanel();
+        diceFaces.setLayout(new BoxLayout(diceFaces, BoxLayout.LINE_AXIS));
+        diceFaces.setComponentOrientation(ComponentOrientation.RIGHT_TO_LEFT);
+        diceFaces.setOpaque(false);
+        die.setMinimumSize(new Dimension(40, 40));
+        multiplierDie.setMinimumSize(new Dimension(40, 40));
+        diceFaces.add(die);
+        multiplierDie.setName("multiplier-die");
+        multiplierDie.setVisible(false);
+        diceFaces.add(multiplierDie);
+        dieRow.add(diceFaces, BorderLayout.CENTER);
+        dieRow.add(rollInfoColumn(), BorderLayout.EAST);
         dice.add(dieRow, BorderLayout.CENTER);
         JPanel diceBottom = new JPanel(new BorderLayout(0, 6));
         diceBottom.setOpaque(false);
@@ -237,7 +255,8 @@ public final class GameBoardView extends JPanel implements GameListener {
         turn.setIcon(KoalaPiecePainter.icon(current.color(), 24));
         DiceRoll latest = state.latestRoll();
         die.setValue(latest == null ? 0 : latest.value());
-        if (!die.isRolling()) rollInfo.setText(rollText(state));
+        updateMultiplierDie(state, latest);
+        if (!die.isRolling()) showRollText(state);
         updateRollButton();
         String feedback = state.feedbackMessage();
         status.setText(feedback != null ? feedback : state.phase() == GameState.Phase.GAME_OVER ? "המשחק הסתיים" : "התור של " + current.name());
@@ -256,6 +275,60 @@ public final class GameBoardView extends JPanel implements GameListener {
         return latest == null ? "ממתין להטלה" : "ההטלה האחרונה: " + latest.value();
     }
 
+    /** The roll text column: step die result, then the multiplier lines when there are any. */
+    private JComponent rollInfoColumn() {
+        JPanel column = new JPanel();
+        column.setLayout(new BoxLayout(column, BoxLayout.PAGE_AXIS));
+        column.setOpaque(false);
+        column.add(Box.createVerticalGlue());
+        for (JLabel label : List.of(rollInfo, multiplierInfo, trackStepsInfo)) {
+            label.setForeground(Theme.KOALA_MUTED);
+            label.setHorizontalAlignment(SwingConstants.RIGHT);
+            label.setAlignmentX(Component.RIGHT_ALIGNMENT);
+            column.add(label);
+        }
+        multiplierInfo.setName("multiplier-info");
+        trackStepsInfo.setName("track-steps-info");
+        multiplierInfo.setVisible(false);
+        trackStepsInfo.setVisible(false);
+        column.add(Box.createVerticalGlue());
+        return column;
+    }
+
+    /** FR-16: the step die result, and with a multiplier die also its value and the steps on the track. */
+    private void showRollText(GameState state) {
+        rollInfo.setText(rollText(state));
+        DiceRoll shown = state.latestRoll();
+        boolean multiplier = shown != null && shown.hasMultiplier();
+        multiplierInfo.setVisible(multiplier);
+        trackStepsInfo.setVisible(multiplier);
+        if (!multiplier) return;
+        multiplierInfo.setText("קוביית " + shown.multiplierDie().displayName() + ": " + shown.multiplierValue());
+        trackStepsInfo.setText("צעדים במסלול: " + shown.trackSteps());
+    }
+
+    /**
+     * Shows the multiplier die when the next throw has one, or keeps showing the last
+     * multiplier result until the next roll. Hidden at Easy outside the UltraBoost surprise.
+     */
+    private void updateMultiplierDie(GameState state, DiceRoll latest) {
+        MultiplierDie upcoming = state.phase() == GameState.Phase.WAITING_FOR_ROLL
+                ? state.nextThrowMultiplier() : MultiplierDie.NONE;
+        MultiplierDie shown = upcoming != MultiplierDie.NONE ? upcoming
+                : latest != null ? latest.multiplierDie() : MultiplierDie.NONE;
+        multiplierDie.setVisible(shown != MultiplierDie.NONE);
+        if (shown == MultiplierDie.NONE) return;
+        multiplierDie.setKind(shown.faces(), multiplierTint(shown));
+        multiplierDie.setToolTipText("קוביית " + shown.displayName());
+        boolean sameDieAsLatest = latest != null && latest.multiplierDie() == shown;
+        multiplierDie.setValue(sameDieAsLatest ? latest.multiplierValue() : 0);
+    }
+
+    /** Boost and UltraBoost get their own face colours so players can tell them apart. */
+    private static Color multiplierTint(MultiplierDie die) {
+        return die == MultiplierDie.BOOST ? new Color(255, 211, 150) : new Color(214, 188, 255);
+    }
+
     /** Formats recent game events with the newest message first. */
     private static String buildLogText(GameState state) {
         return String.join("\n", state.recentLog());
@@ -269,6 +342,8 @@ public final class GameBoardView extends JPanel implements GameListener {
             onRoll.run();
             return;
         }
+        // Only the dice of the coming throw tumble; a die left over from an earlier throw stays still.
+        if (displayedState.nextThrowMultiplier() != MultiplierDie.NONE) multiplierDie.animateRoll(() -> { });
         die.animateRoll(() -> {
             try {
                 if (displayedState != null && displayedState.phase() == GameState.Phase.WAITING_FOR_ROLL) onRoll.run();
@@ -277,6 +352,8 @@ public final class GameBoardView extends JPanel implements GameListener {
             }
         });
         rollInfo.setText("הקובייה מתגלגלת...");
+        multiplierInfo.setVisible(false);
+        trackStepsInfo.setVisible(false);
         updateRollButton();
     }
 
@@ -289,7 +366,8 @@ public final class GameBoardView extends JPanel implements GameListener {
             row.setBorder(BorderFactory.createEmptyBorder(3, 8, 3, 8));
             JPanel rowTop = new JPanel(new BorderLayout(4, 0));
             rowTop.setOpaque(false);
-            String nameText = player.name() + (player.isFinished() ? "  |  מקום " + player.rank() : "");
+            String nameText = player.name() + (player.isFinished() ? "  |  מקום " + player.rank() : "")
+                    + (state.losesNextTurn(player) ? "  |  מפסיד/ה תור" : "");
             JLabel name = Theme.label(nameText, 13, active);
             name.setIcon(KoalaPiecePainter.icon(player.color(), 20));
             name.setIconTextGap(6);
@@ -326,7 +404,8 @@ public final class GameBoardView extends JPanel implements GameListener {
     /** Enables dice rolling only when the game and animations allow it. */
     private void updateRollButton() {
         rollButton.setEnabled(displayedState != null && displayedState.phase() == GameState.Phase.WAITING_FOR_ROLL && !canvas.isBusy() && !die.isRolling());
-        rollButton.setText(die.isRolling() ? "הקובייה מתגלגלת..." : "הטלת קובייה");
+        boolean special = displayedState != null && displayedState.specialRollPending();
+        rollButton.setText(die.isRolling() ? "הקובייה מתגלגלת..." : special ? "הטלה מיוחדת - UltraBoost" : "הטלת קובייה");
     }
 
     /** Runs the continuation after all board visual effects finish. */
@@ -338,6 +417,7 @@ public final class GameBoardView extends JPanel implements GameListener {
     public void stopClock() {
         clockTimer.stop();
         die.cancelRollAnimation();
+        multiplierDie.cancelRollAnimation();
         canvas.stopEffects();
     }
 }

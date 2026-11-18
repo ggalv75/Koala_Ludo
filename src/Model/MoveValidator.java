@@ -19,7 +19,9 @@ public final class MoveValidator {
                 continue;
             }
             if (state.isFinished(piece)) continue;
-            int target = piece.step() + stepsFor(piece, roll, board);
+            int steps = stepsFor(piece, roll, board);
+            if (steps == 0) continue; // FR-16: multiplier 1 gives coefficient 0, the piece cannot move
+            int target = piece.step() + steps;
             if (target > board.finishStep()) continue; // FR-26: the finish needs an exact roll
             int reachable = furthestReachable(state, piece, target);
             if (reachable == target) {
@@ -39,9 +41,13 @@ public final class MoveValidator {
         return Optional.of(new Move(piece.id(), Piece.IN_CASTLE, 0, true, false));
     }
 
-    /** Use the ordinary die result for Easy-level movement. */
+    /**
+     * FR-16, FR-17: a piece on the shared track moves die x (N - 1) squares; a piece already on
+     * its home path moves by the step die only. Each piece gets its own count, so with pieces on
+     * both parts of the route the player chooses between the two (Ludo Project-V2, p. 5, notes).
+     */
     static int stepsFor(Piece piece, DiceRoll roll, Board board) {
-        return roll.value();
+        return piece.step() >= board.homePathStart() ? roll.homePathSteps() : roll.trackSteps();
     }
 
     /** Walks square by square towards the target and stops before the first opponent Double Block (FR-31). */
