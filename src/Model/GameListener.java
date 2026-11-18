@@ -2,6 +2,7 @@ package Model;
 
 /** Observer events isolate game rules from animations (MVC, SRS 3.4.2). */
 public interface GameListener {
+
     /** Notify listeners about a committed piece movement before the state refresh. */
     default void onPieceMoved(Move move) { }
 
@@ -10,6 +11,9 @@ public interface GameListener {
 
     /** Announce a player who finished all four pieces and received a final place. */
     default void onPlayerFinished(PlayerFinishEvent event) { }
+
+    /** Announce a drawn surprise before resolving its effect. */
+    default void onSurpriseDrawn(SurpriseEvent event) { }
 
     /** Notify listeners that the current game state has changed. */
     default void onStateChanged(GameState state) { }
