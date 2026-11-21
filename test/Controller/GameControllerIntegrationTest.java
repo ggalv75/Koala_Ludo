@@ -287,4 +287,23 @@ class GameControllerIntegrationTest {
         }
         return matches;
     }
+
+	@Test
+	void selectingMediumStartsMediumGame() throws Exception {
+	    SwingUtilities.invokeAndWait(() -> {
+	        openAndFillSetup(2);
+	        AbstractButton easy = findNamed(AbstractButton.class, "difficulty-EASY");
+	        AbstractButton medium = findNamed(AbstractButton.class, "difficulty-MEDIUM");
+	
+	        assertTrue(easy.isSelected());
+	        medium.doClick(0);
+	        assertTrue(medium.isSelected());
+	        assertFalse(easy.isSelected());
+	
+	        clickButton("setup-start");
+	        assertInstanceOf(GameBoardView.class, frame.getContentPane());
+	        assertTrue(findComponents(frame.getContentPane(), JLabel.class).stream()
+	                .anyMatch(label -> "רמת קושי: בינוני".equals(label.getText())));
+	    });
+	}
 }
