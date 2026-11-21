@@ -15,6 +15,10 @@ class BoardFactoryTest {
     private static Board board(long seed) {
         return BoardFactory.create(Difficulty.EASY, new Random(seed));
     }
+    	
+	private static Board mediumBoard(long seed) {
+	    return BoardFactory.create(Difficulty.MEDIUM, new Random(seed));
+	}
 
     /** Return the four randomly assigned safe-square positions. */
     private static Set<Position> safeSquares(Board board) {
@@ -197,5 +201,41 @@ class BoardFactoryTest {
 	            assertEquals(color, cell.color());
 	        }
 	    }
+	}
+
+	@Test
+	void mediumSafeSquaresOnlyReplaceUncoloredRegularSquares() {
+	    Map<Position, Cell> fixedCells = new MediumBoardLayout().fixedCells();
+	
+	    for (int seed = 0; seed < 100; seed++) {
+	        Board board = mediumBoard(seed);
+	        Set<Position> safe = safeSquares(board);
+	
+	        assertEquals(8, safe.size(), "Wrong SAFE count at seed " + seed);
+	
+	        for (Position position : safe) {
+	            assertEquals(Cell.REGULAR, fixedCells.get(position));
+	            assertNull(board.cellAt(position).color());
+	            assertTrue(board.cellAt(position).isProtected());
+	        }
+	
+	        for (Map.Entry<Position, Cell> entry : fixedCells.entrySet()) {
+	            if (!safe.contains(entry.getKey())) {
+	                assertEquals(entry.getValue(), board.cellAt(entry.getKey()));
+	            }
+	        }
+	    }
+	}
+	
+	@Test
+	void mediumSafeSquaresAreRepeatableButRandom() {
+	    assertEquals(safeSquares(mediumBoard(42)), safeSquares(mediumBoard(42)));
+	
+	    Set<Set<Position>> layouts = new HashSet<>();
+	    for (int seed = 0; seed < 30; seed++) {
+	        layouts.add(safeSquares(mediumBoard(seed)));
+	    }
+	
+	    assertTrue(layouts.size() > 1, "SAFE positions did not change between games");
 	}
 }

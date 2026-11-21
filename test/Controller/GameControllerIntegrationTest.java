@@ -1,6 +1,6 @@
-
 package Controller;
-
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import static org.junit.jupiter.api.Assertions.*;
 import java.awt.Component;
 import java.awt.Container;
@@ -288,10 +288,21 @@ class GameControllerIntegrationTest {
         return matches;
     }
 
-	@Test
-	void selectingMediumStartsMediumGame() throws Exception {
+	@ParameterizedTest
+	@ValueSource(ints = {2, 3, 4})
+	void selectingMediumStartsMediumGame(int playerCount) throws Exception {
 	    SwingUtilities.invokeAndWait(() -> {
-	        openAndFillSetup(2);
+	        openAndFillSetup(playerCount);
+	
+	        // Choose a different valid color combination.
+	        PlayerColor[] colors = PlayerColor.values();
+	        for (int i = 0; i < playerCount; i++) {
+	            clickButton(colorButtonName(i, colors[i]));
+	        }
+	        for (int i = 0; i < playerCount; i++) {
+	            clickButton(colorButtonName(i, colors[colors.length - 1 - i]));
+	        }
+	
 	        AbstractButton easy = findNamed(AbstractButton.class, "difficulty-EASY");
 	        AbstractButton medium = findNamed(AbstractButton.class, "difficulty-MEDIUM");
 	
@@ -301,9 +312,11 @@ class GameControllerIntegrationTest {
 	        assertFalse(easy.isSelected());
 	
 	        clickButton("setup-start");
+	
 	        assertInstanceOf(GameBoardView.class, frame.getContentPane());
 	        assertTrue(findComponents(frame.getContentPane(), JLabel.class).stream()
 	                .anyMatch(label -> "רמת קושי: בינוני".equals(label.getText())));
+	        assertTrue(findNamed(AbstractButton.class, "roll-button").isEnabled());
 	    });
 	}
 }
