@@ -16,6 +16,8 @@ public final class DieFace extends JComponent {
     private static final int FACE_CHANGE_MS = 76;
 
     private int value;
+    private int faces = 6;
+    private Color faceTint = new Color(226, 239, 252);
     private int visualValue;
     private boolean rolling;
     private double progress;
@@ -31,6 +33,14 @@ public final class DieFace extends JComponent {
         setOpaque(false);
     }
 
+    /** Faces shown while tumbling (3 for Boost, 6 otherwise) and the colour of the die face. */
+    public void setKind(int faces, Color tint) {
+        if (faces < 2 || faces > 6) throw new IllegalArgumentException("Die must have 2..6 faces");
+        this.faces = faces;
+        this.faceTint = tint;
+        repaint();
+    }
+
     /** Display a result from the Model, never an independently generated game result. */
     public void setValue(int value) {
         if (value < 0 || value > 6) throw new IllegalArgumentException("Die face must be 0..6");
@@ -43,7 +53,10 @@ public final class DieFace extends JComponent {
     public boolean isRolling() { return rolling; }
 
     /** Show the authoritative result most recently supplied by the Model. */
-    int value() { return value; }
+    public int value() { return value; }
+
+    /** Number of faces this die shows (3 for Boost, 6 otherwise). */
+    public int faces() { return faces; }
 
     /** Animate the dice first, then request exactly one real Model roll. */
     public void animateRoll(Runnable rollAction) {
@@ -57,7 +70,7 @@ public final class DieFace extends JComponent {
         startedAt = System.nanoTime();
         lastFaceIndex = -1;
         onRollComplete = rollAction;
-        visualValue = 1 + ThreadLocalRandom.current().nextInt(6);
+        visualValue = 1 + ThreadLocalRandom.current().nextInt(faces);
         animationTimer = new Timer(FRAME_MS, event -> advanceFrame());
         animationTimer.setCoalesce(true);
         animationTimer.start();
@@ -87,7 +100,7 @@ public final class DieFace extends JComponent {
         if (faceIndex != lastFaceIndex) {
             int next;
             do {
-                next = 1 + ThreadLocalRandom.current().nextInt(6);
+                next = 1 + ThreadLocalRandom.current().nextInt(faces);
             } while (next == visualValue);
             visualValue = next;
             lastFaceIndex = faceIndex;
@@ -151,7 +164,7 @@ public final class DieFace extends JComponent {
         RoundRectangle2D.Double front = new RoundRectangle2D.Double(
                 -half, -half, size, size - 4, radius, radius);
         g.setPaint(new GradientPaint(0, (float) -half, Color.WHITE,
-                (float) size, (float) half, new Color(226, 239, 252)));
+                (float) size, (float) half, faceTint));
         g.fill(front);
         g.setColor(face == 0 ? Theme.BORDER : new Color(71, 102, 134));
         g.setStroke(new BasicStroke(1.7f));

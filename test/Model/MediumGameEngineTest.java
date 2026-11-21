@@ -21,13 +21,19 @@ class MediumGameEngineTest {
 
 	@Test
 	void engineMovesPieceFromOuterToInnerTrack() {
-	    Dice fixedDice = new Dice() {
-	        @Override
-	        public DiceRoll roll() {
-	            return new DiceRoll(3);
-	        }
-	    };
-	
+		Dice fixedDice = new Dice() {
+		    @Override
+		    public DiceRoll roll() {
+		        return new DiceRoll(3);
+		    }
+		
+		    @Override
+		    public int rollMultiplier(MultiplierDie die) {
+		        assertEquals(MultiplierDie.BOOST, die);
+		        return 2;
+		    }
+		};
+		
 	    GameEngine engine = new GameEngine(Difficulty.MEDIUM, List.of("Red", "Green"), List.of(PlayerColor.RED, PlayerColor.GREEN),
 	    		new java.util.Random(42), fixedDice, java.time.Clock.systemUTC());
 	

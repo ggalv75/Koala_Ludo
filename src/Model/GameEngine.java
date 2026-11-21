@@ -11,7 +11,10 @@ import java.util.*;
  */
 public final class GameEngine {
     private final GameState state;
-    private final Dice dice;
+    /** Template Method: the level's regular throw (step die only at Easy, plus Boost/UltraBoost above). */
+    private final DiceThrow regularThrow;
+    /** Template Method: the UltraBoost surprise throw (FR-21), the same at every level. */
+    private final DiceThrow surpriseThrow;
     private final GameClock gameClock;
     private final List<GameListener> listeners = new ArrayList<>();
 
@@ -31,7 +34,8 @@ public final class GameEngine {
             players.add(new Player(i, names.get(i).trim(), colors.get(i)));
         }
         this.state = new GameState(BoardFactory.create(difficulty, boardRandom), players);
-        this.dice = Objects.requireNonNull(dice);
+        this.regularThrow = DiceThrow.regularFor(difficulty.multiplierDie(), dice);
+        this.surpriseThrow = new SurpriseUltraBoostThrow(dice);
         this.gameClock = new GameClock(clock);
         state.log("המשחק התחיל!");
     }
@@ -48,7 +52,11 @@ public final class GameEngine {
     /** Unregister a previously added observer. */
     public void removeListener(GameListener listener) { listeners.remove(listener); }
 
-    /** FR-15, FR-18, FR-19, FR-20: rolls the die and works out what the player may do. */
+    /**
+     * FR-15 to FR-21: rolls the dice and works out what the player may do. The steps of the
+     * throw are fixed in {@link DiceThrow#perform} (Template Method); here we only choose which
+     * throw it is and react to the outcome.
+     */
     public void rollDice() {
         if (state.phase() != GameState.Phase.WAITING_FOR_ROLL) {
             rejectAction("בחר כלי לפני הטלה נוספת.");
@@ -56,13 +64,13 @@ public final class GameEngine {
         }
         state.setFeedbackMessage(null);
         Player player = state.currentPlayer();
-        DiceRoll roll = dice.roll();
-        state.setLastRoll(roll);
-        state.log(player.name() + ": תוצאת הקובייה - " + roll.value());
-        List<Move> moves = MoveValidator.legalMoves(state, roll);
-        switch (TurnManager.afterRoll(state, roll, !moves.isEmpty())) {
+        DiceThrow diceThrow = state.turnState().takeSpecialRoll() ? surpriseThrow : regularThrow;
+        ThrowResult result = diceThrow.perform(state);
+        state.setLastRoll(result.roll());
+        state.log(player.name() + ": " + diceThrow.describe(result.roll()));
+        switch (result.outcome()) {
             case CHOOSE_PIECE -> {
-                state.setLegalMoves(moves);
+                state.setLegalMoves(result.legalMoves());
                 state.setPhase(GameState.Phase.WAITING_FOR_MOVE);
             }
             case ROLL_AGAIN -> {
@@ -143,20 +151,27 @@ public final class GameEngine {
     }
 
     /**
-     * FR-47, FR-19, FR-46: ends the game, gives another roll after a six (not to a player
-     * who has just finished), or passes the turn. Returns true if the game ended.
+     * FR-47, FR-19, FR-21, FR-22, FR-46: ends the game, gives the UltraBoost surprise throw,
+     * gives another roll after a six (not to a player who has just finished or lost the turn),
+     * or passes the turn. Returns true if the game ended.
      */
     private boolean endTurnAfterMove(Player player, boolean justFinished) {
         if (justFinished && RankingManager.isGameOver(state)) {
             endGame();
             return true;
         }
-        if (TurnManager.rollsAgain(player, state.lastRoll())) {
-            state.setLastRoll(null);
-            state.setPhase(GameState.Phase.WAITING_FOR_ROLL);
-            state.log("תור נוסף ל" + player.name() + "!");
-        } else {
-            passTurn();
+        switch (TurnManager.afterMove(state, player, state.lastRoll())) {
+            case SPECIAL_ROLL -> {
+                state.setLastRoll(null);
+                state.setPhase(GameState.Phase.WAITING_FOR_ROLL);
+                state.log("הטלה מיוחדת ל" + player.name() + ": קובייה רגילה + UltraBoost!");
+            }
+            case ROLL_AGAIN -> {
+                state.setLastRoll(null);
+                state.setPhase(GameState.Phase.WAITING_FOR_ROLL);
+                state.log("תור נוסף ל" + player.name() + "!");
+            }
+            case PASS_TURN -> passTurn();
         }
         return false;
     }
