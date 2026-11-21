@@ -25,7 +25,8 @@ public abstract class BoardFactory {
         Objects.requireNonNull(difficulty, "difficulty");
         Objects.requireNonNull(random, "random");
         BoardFactory factory = switch (difficulty) {
-            case EASY -> new EasyBoardFactory();
+        case EASY -> new EasyBoardFactory();
+        case MEDIUM -> new MediumBoardFactory();
         };
         return factory.build(difficulty, random);
     }

@@ -7,7 +7,8 @@ package Model;
  */
 public enum Difficulty {
     /** FR-07, FR-09, FR-10, FR-11: 15x15 board, 52-square track, 4 arrows, 4 safe squares, regular die only. */
-    EASY("קל", 15, 52, 5, 4, 4);
+	EASY("קל", 15, 52, 5, 4, 4),
+    MEDIUM("בינוני", 17, 116, 5, 8, 8);
 
     private final String displayName;
     private final int boardSize;

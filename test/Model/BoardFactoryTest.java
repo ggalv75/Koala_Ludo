@@ -156,4 +156,31 @@ class BoardFactoryTest {
         assertThrows(UnsupportedOperationException.class, () -> board.cells().clear());
         assertThrows(UnsupportedOperationException.class, () -> board.route(PlayerColor.GREEN).clear());
     }
+   
+	@Test
+	void mediumBoardIsCreatedCorrectly() {
+	    for (int seed = 0; seed < 30; seed++) {
+	        Board board = BoardFactory.create(Difficulty.MEDIUM, new Random(seed));
+	        assertEquals(17, board.size());
+	        assertEquals(136, board.cells().size());
+	        assertEquals(4, board.count(CellType.START));
+	        assertEquals(8, board.count(CellType.ARROW));
+	        assertEquals(8, board.count(CellType.SAFE));
+	        assertEquals(20, board.count(CellType.HOME));
+	        assertEquals(96, board.count(CellType.REGULAR));
+	        assertEquals(110, board.homePathStart());
+	        assertEquals(115, board.finishStep());
+	
+	        for (PlayerColor color : PlayerColor.values()) {
+	            List<Position> route = board.route(color);
+	            assertEquals(115, route.size());
+	            assertEquals(CellType.START, board.cellAt(route.get(0)).type());
+	            assertEquals(CellType.ARROW, board.cellAt(route.get(57)).type());
+	            assertEquals(CellType.ARROW, board.cellAt(route.get(109)).type());
+	            assertEquals(CellType.HOME, board.cellAt(route.get(110)).type());
+	            assertEquals(color, board.cellAt(route.get(57)).color());
+	            assertEquals(color, board.cellAt(route.get(109)).color());
+	        }
+	    }
+	}
 }
