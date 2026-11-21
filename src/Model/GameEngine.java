@@ -2,18 +2,20 @@ package Model;
 
 import java.time.Clock;
 import java.util.*;
+import java.util.function.Function;
 
 /**
  * Entry point to the game rules (Facade design pattern) and subject of the Observer pattern.
- * The Controller calls {@link #rollDice()} and {@link #movePiece(int)}; registered
- * {@link GameListener}s (the views) are notified after every change.
- * Invalid actions never throw: they only produce a message for the player (NFR-01).
+ * The Controller calls game actions; registered GameListeners observe committed changes.
+ * Invalid player actions produce feedback instead of terminating the game (NFR-01).
  */
 public final class GameEngine {
     private final GameState state;
     private final Dice dice;
     private final GameClock gameClock;
     private final List<GameListener> listeners = new ArrayList<>();
+    private QuestionService questionService;
+    private Function<Position, Optional<QuestionLevel>> questionLevelResolver;
 
     /** Initialize a game with validated players and deterministic dependencies. */
     public GameEngine(Difficulty difficulty, List<String> names, List<PlayerColor> colors) {
@@ -48,10 +50,42 @@ public final class GameEngine {
     /** Unregister a previously added observer. */
     public void removeListener(GameListener listener) { listeners.remove(listener); }
 
-    /** FR-15, FR-18, FR-19, FR-20: rolls the die and works out what the player may do. */
+    /** Configure question logic before the first turn; no View or encryption key belongs in this class. */
+    public void configureQuestions(QuestionService service) {
+        configureQuestions(service, this::questionLevelFromBoard);
+    }
+
+    /** Inject square detection for deterministic tests and future board configurations. */
+    void configureQuestions(QuestionService service,
+                            Function<Position, Optional<QuestionLevel>> resolver) {
+        if (questionService != null) throw new IllegalStateException("Questions already configured");
+        if (state.phase() != GameState.Phase.WAITING_FOR_ROLL || state.latestRoll() != null) {
+            throw new IllegalStateException("Configure questions before the first roll");
+        }
+        questionService = Objects.requireNonNull(service, "service");
+        questionLevelResolver = Objects.requireNonNull(resolver, "resolver");
+    }
+
+    /** FR-33: translate question cells into their three difficulty levels when Omer adds them. */
+    private Optional<QuestionLevel> questionLevelFromBoard(Position position) {
+        if (position == null) return Optional.empty();
+        Cell cell = state.board().cellAt(position);
+        if (cell == null) return Optional.empty();
+        // Bridge to Omer's future CellType values; Easy's existing enum does not define them yet.
+        return switch (cell.type().name()) {
+            case "QUESTION_EASY" -> Optional.of(QuestionLevel.EASY);
+            case "QUESTION_MEDIUM" -> Optional.of(QuestionLevel.MEDIUM);
+            case "QUESTION_HARD" -> Optional.of(QuestionLevel.HARD);
+            default -> Optional.empty();
+        };
+    }
+
+    /** FR-15, FR-18, FR-19, FR-20: roll the die and work out what the player may do. */
     public void rollDice() {
         if (state.phase() != GameState.Phase.WAITING_FOR_ROLL) {
-            rejectAction("בחר כלי לפני הטלה נוספת.");
+            rejectAction(state.phase() == GameState.Phase.WAITING_FOR_QUESTION_ANSWER ||
+                    state.phase() == GameState.Phase.WAITING_FOR_QUESTION_EFFECT
+                    ? "יש להשלים את השאלה לפני ההטלה הבאה." : "בחר כלי לפני הטלה נוספת.");
             return;
         }
         state.setFeedbackMessage(null);
@@ -91,7 +125,9 @@ public final class GameEngine {
     /** Reject illegal selections or commit exactly one approved move. */
     public boolean movePiece(int pieceId) {
         if (state.phase() != GameState.Phase.WAITING_FOR_MOVE) {
-            rejectAction("הטל קובייה לפני בחירת כלי.");
+            rejectAction(state.phase() == GameState.Phase.WAITING_FOR_QUESTION_ANSWER ||
+                    state.phase() == GameState.Phase.WAITING_FOR_QUESTION_EFFECT
+                    ? "יש להשלים את השאלה לפני בחירת כלי נוסף." : "הטל קובייה לפני בחירת כלי.");
             return false;
         }
         Optional<Move> move = state.legalMoves().stream().filter(m -> m.pieceId() == pieceId).findFirst();
@@ -128,24 +164,59 @@ public final class GameEngine {
             state.log(player.name() + " הכניס כלי לבית הסיום!");
         }
         PlayerFinishEvent playerFinish = rankIfAllPiecesHome(player);
-        boolean gameOver = endTurnAfterMove(player, playerFinish != null);
-        notifyMoved(move, interaction, playerFinish);
+
+        // Do not end the turn when the move landed on a question square.
+        Question question = openQuestionForLanding(piece, to);
+        boolean gameOver = question == null && endTurnAfterMove(player, playerFinish != null);
+        notifyMoved(move, interaction, playerFinish, question);
         if (gameOver) {
             for (GameListener listener : List.copyOf(listeners)) listener.onGameOver(state.result());
         }
     }
 
-    /** FR-45: ranks the player when all four pieces are home. Returns the finish event, or null. */
+    /** FR-33–FR-35: open one question, remember its piece and pause the current turn. */
+    private Question openQuestionForLanding(Piece piece, Position destination) {
+        if (questionService == null || destination == null || state.isFinished(piece)) return null;
+        Optional<QuestionLevel> level = Objects.requireNonNull(
+                questionLevelResolver.apply(destination), "question resolver result");
+        if (level.isEmpty()) return null;
+        Question question = questionService.startQuestion(level.get());
+        state.beginQuestion(question, piece.id());
+        state.log("שאלה ברמה " + question.level() + " עבור " + state.currentPlayer().name());
+        return question;
+    }
+
+    /** FR-36: accept one legal answer and notify observers, leaving movement for stage 6. */
+    public Optional<QuestionService.AnswerResult> submitQuestionAnswer(int selectedIndex) {
+        if (state.phase() != GameState.Phase.WAITING_FOR_QUESTION_ANSWER || questionService == null) {
+            rejectAction("אין שאלה שממתינה לתשובה.");
+            return Optional.empty();
+        }
+        final QuestionService.AnswerResult answer;
+        try {
+            answer = questionService.submitAnswer(selectedIndex);
+        } catch (IllegalArgumentException error) {
+            rejectAction("בחר אחת מארבע אפשרויות התשובה.");
+            return Optional.empty();
+        }
+        int pieceId = state.questionPieceId().orElseThrow();
+        state.recordQuestionAnswer(answer);
+        state.setFeedbackMessage(null);
+        state.log(answer.correct() ? "תשובה נכונה!" : "תשובה שגויה.");
+        for (GameListener listener : List.copyOf(listeners)) listener.onQuestionAnswered(answer, pieceId);
+        notifyChanged();
+        // Stage 6 will apply the movement result and only then resume/finish the turn.
+        return Optional.of(answer);
+    }
+
+    /** FR-45: rank the player when all four pieces are home. */
     private PlayerFinishEvent rankIfAllPiecesHome(Player player) {
         if (!RankingManager.rankIfAllPiecesHome(state, player)) return null;
         state.log("מקום " + player.rank() + ": " + player.name());
         return new PlayerFinishEvent(player.index(), player.name(), player.color(), player.rank());
     }
 
-    /**
-     * FR-47, FR-19, FR-46: ends the game, gives another roll after a six (not to a player
-     * who has just finished), or passes the turn. Returns true if the game ended.
-     */
+    /** FR-47, FR-19, FR-46: end or advance the turn after a completed move. */
     private boolean endTurnAfterMove(Player player, boolean justFinished) {
         if (justFinished && RankingManager.isGameOver(state)) {
             endGame();
@@ -190,7 +261,7 @@ public final class GameEngine {
         return List.copyOf(changes);
     }
 
-    /** FR-47, FR-48: stops the clock, ranks the last player and locks the game. */
+    /** FR-47, FR-48: stop the clock, rank the last player and lock the game. */
     private void endGame() {
         gameClock.stop();
         RankingManager.rankRemainingPlayers(state);
@@ -204,18 +275,22 @@ public final class GameEngine {
     }
 
     /** Advance to the next unfinished player. */
-    private void passTurn() {
-        TurnManager.passTurn(state);
-    }
+    private void passTurn() { TurnManager.passTurn(state); }
 
-    /** Publish immutable movement and interaction events before refreshing observers. */
-    private void notifyMoved(Move move, PieceInteractionEvent interaction, PlayerFinishEvent playerFinish) {
+    /** Publish movement and question events before refreshing the observers' view of the state. */
+    private void notifyMoved(Move move, PieceInteractionEvent interaction,
+                             PlayerFinishEvent playerFinish, Question question) {
         for (GameListener listener : List.copyOf(listeners)) listener.onPieceMoved(move);
         if (interaction.hasVisualEffect()) {
             for (GameListener listener : List.copyOf(listeners)) listener.onPieceInteraction(interaction);
         }
         if (playerFinish != null) {
             for (GameListener listener : List.copyOf(listeners)) listener.onPlayerFinished(playerFinish);
+        }
+        if (question != null) {
+            for (GameListener listener : List.copyOf(listeners)) {
+                listener.onQuestionRequested(question, move.pieceId());
+            }
         }
         notifyChanged();
     }

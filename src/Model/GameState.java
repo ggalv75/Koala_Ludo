@@ -7,7 +7,10 @@ import java.util.*;
  * only classes of the Model package change the state.
  */
 public final class GameState {
-    public enum Phase { WAITING_FOR_ROLL, WAITING_FOR_MOVE, GAME_OVER }
+    public enum Phase {
+        WAITING_FOR_ROLL, WAITING_FOR_MOVE,
+        WAITING_FOR_QUESTION_ANSWER, WAITING_FOR_QUESTION_EFFECT, GAME_OVER
+    }
 
     private static final int LOG_SIZE = 40;
     private final Board board;
@@ -22,6 +25,10 @@ public final class GameState {
     private final Deque<String> log = new ArrayDeque<>();
     private GameResult result;
     private String feedbackMessage;
+
+    private Question activeQuestion;
+    private Integer questionPieceId;
+    private QuestionService.AnswerResult pendingQuestionResult;
 
     /** FR-04: four pieces per player, all starting in the owner's castle. */
     GameState(Board board, List<Player> players) {
@@ -61,6 +68,17 @@ public final class GameState {
     /** Return the finished game result when available. */
     public GameResult result() { return result; }
 
+    /** Return the public data of the question awaiting an answer, if any. */
+    public Optional<Question> activeQuestion() { return Optional.ofNullable(activeQuestion); }
+    /** Return the piece involved in the question, until its effect has been applied. */
+    public OptionalInt questionPieceId() {
+        return questionPieceId == null ? OptionalInt.empty() : OptionalInt.of(questionPieceId);
+    }
+    /** Return a submitted answer that still needs its movement effect (FR-37). */
+    public Optional<QuestionService.AnswerResult> pendingQuestionResult() {
+        return Optional.ofNullable(pendingQuestionResult);
+    }
+
     /** Return one piece by its stable identifier. */
     public Piece piece(int id) { return pieces.get(id); }
 
@@ -77,7 +95,7 @@ public final class GameState {
     /** The square the piece stands on, or null when it is in the castle or the finish area. */
     public Position positionOf(Piece piece) { return board.positionOf(piece.color(), piece.step()); }
 
-    /** Count a player’s pieces already inside the finish. */
+    /** Count a player's pieces already inside the finish. */
     public int finishedPieceCount(Player player) {
         int count = 0;
         for (Piece piece : piecesOf(player)) if (isFinished(piece)) count++;
@@ -94,12 +112,47 @@ public final class GameState {
 
     /** Most recent messages first. */
     public List<String> recentLog() { return List.copyOf(log); }
-    
+
     /** Return the current feedback message, or null if none exists. */
     public String feedbackMessage() { return feedbackMessage; }
-    
+
     /** Update the feedback displayed outside the game log. */
     void setFeedbackMessage(String message) { feedbackMessage = message; }
+
+    /** FR-33: hold the question and its moving piece while waiting for an answer. */
+    void beginQuestion(Question question, int pieceId) {
+        if (activeQuestion != null || questionPieceId != null || pendingQuestionResult != null) {
+            throw new IllegalStateException("Another question is already active");
+        }
+        Piece piece = piece(pieceId);
+        if (piece.ownerIndex() != currentPlayer().index() || piece.isInCastle() || isFinished(piece)) {
+            throw new IllegalArgumentException("Question must belong to a current, active piece");
+        }
+        activeQuestion = Objects.requireNonNull(question, "question");
+        questionPieceId = pieceId;
+        pendingQuestionResult = null;
+        legalMoves = List.of();
+        phase = Phase.WAITING_FOR_QUESTION_ANSWER;
+    }
+
+    /** FR-36: retain the result until FR-37 movement is implemented and applied. */
+    void recordQuestionAnswer(QuestionService.AnswerResult answer) {
+        if (phase != Phase.WAITING_FOR_QUESTION_ANSWER || activeQuestion == null ||
+                questionPieceId == null || !activeQuestion.level().equals(answer.level()) ||
+                activeQuestion.id() != answer.questionId()) {
+            throw new IllegalStateException("Answer does not match the pending question");
+        }
+        activeQuestion = null;
+        pendingQuestionResult = answer;
+        phase = Phase.WAITING_FOR_QUESTION_EFFECT;
+    }
+
+    /** Release question metadata after FR-37 movement and turn resolution in a later stage. */
+    void clearQuestion() {
+        activeQuestion = null;
+        questionPieceId = null;
+        pendingQuestionResult = null;
+    }
 
     /** Update the active player as part of turn management. */
     void setCurrentPlayerIndex(int index) { this.currentPlayerIndex = index; }
