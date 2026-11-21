@@ -183,4 +183,19 @@ class BoardFactoryTest {
 	        }
 	    }
 	}
+
+	@Test
+	void mediumColoredSquaresRemainFixed() {
+	    Map<PlayerColor, Position> expected = Map.of(
+	    		PlayerColor.RED, new Position(7, 2), PlayerColor.GREEN, new Position(2, 9), 
+	    		PlayerColor.YELLOW, new Position(9, 14), PlayerColor.BLUE, new Position(14, 7));
+	    for (int seed = 0; seed < 100; seed++) {
+	        Board board = BoardFactory.create(Difficulty.MEDIUM, new Random(seed));
+	        for (PlayerColor color : PlayerColor.values()) {
+	            Cell cell = board.cellAt(expected.get(color));
+	            assertEquals(CellType.REGULAR, cell.type());
+	            assertEquals(color, cell.color());
+	        }
+	    }
+	}
 }

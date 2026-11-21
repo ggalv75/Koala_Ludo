@@ -54,9 +54,9 @@ public abstract class BoardFactory {
     private static void placeSafeSquares(Map<Position, Cell> cells, int count, Random random) {
         List<Position> free = new ArrayList<>();
         for (Map.Entry<Position, Cell> entry : cells.entrySet()) {
-            if (entry.getValue().type() == CellType.REGULAR) {
-                free.add(entry.getKey());
-            }
+        	if (entry.getValue().type() == CellType.REGULAR && entry.getValue().color() == null) {
+        	    free.add(entry.getKey());
+        	}
         }
         if (count < 0 || count > free.size()) {
             throw new IllegalArgumentException("Invalid safe square count: " + count);

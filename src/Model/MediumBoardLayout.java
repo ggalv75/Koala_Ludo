@@ -32,6 +32,9 @@ final class MediumBoardLayout implements BoardLayout {
     private static final Map<PlayerColor, Position> CASTLES = Map.of(
     		PlayerColor.RED, new Position(1, 1), PlayerColor.GREEN, new Position(1, 10), 
     		PlayerColor.YELLOW, new Position(10, 10), PlayerColor.BLUE, new Position(10, 1));
+    private static final Map<PlayerColor, Position> COLORED_INNER = Map.of(
+    		PlayerColor.RED, new Position(7, 2), PlayerColor.GREEN, new Position(2, 9), 
+    		PlayerColor.YELLOW, new Position(9, 14), PlayerColor.BLUE, new Position(14, 7));
     private static final Position CENTER = new Position(7, 7);
     private static final Map<Position, Cell> FIXED_CELLS = createFixedCells();
     private static final Map<PlayerColor, List<Position>> ROUTES = createRoutes();
@@ -74,6 +77,7 @@ final class MediumBoardLayout implements BoardLayout {
             cells.put(STARTS.get(color), new Cell(CellType.START, color));
             cells.put(OUTER_ARROWS.get(color), new Cell(CellType.ARROW, color));
             cells.put(INNER_ARROWS.get(color), new Cell(CellType.ARROW, color));
+            cells.put(COLORED_INNER.get(color), new Cell(CellType.REGULAR, color));
         }
         return Collections.unmodifiableMap(cells);
     }
