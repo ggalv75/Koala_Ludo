@@ -42,6 +42,10 @@
 - **Factory** – `BoardFactory`: יוצר לוח לפי רמת קושי. ברמות הבינונית והקשה יתווסף שם רק אופן הבנייה.
 - **Facade** – `SoundManager`: המסכים קוראים רק ל-`play(...)` ולמתגי המוזיקה והצלילים, ולא מכירים את Java Sound.
 - **Null Object** – `SilentSounds` (דרך `GameSounds.silent()`): מימוש שקט של אותו ממשק. משמש בבדיקות ובכל מקום שאין בו צורך בסאונד, כך שהקוד לא בודק `null`.
+- **Template Method** (איטרציה 2, גל) – `DiceThrow`: כל הטלה עוברת אותו רצף, שמוגדר פעם אחת במתודה `final perform()`: קובייה רגילה, קוביית מכפיל, חישוב צעדים (FR-16, FR-17) וחוק ה-6 (FR-19, FR-20). תתי-המחלקות משנות רק את השלבים שמשתנים:
+  - `StepDieThrow` – רמה קלה, בלי קוביית מכפיל.
+  - `MultiplierDieThrow` – Boost ברמה הבינונית, UltraBoost ברמה הקשה.
+  - `SurpriseUltraBoostThrow` – ההטלה המיוחדת מההפתעה (FR-21). דורסת את ה-hook `countsTowardSixStreak()`, כך שההטלה לא נספרת ברצף ה-6 ולא מתבטלת.
 
 ## מוזיקה וצלילים
 
@@ -51,7 +55,21 @@
 - ההשמעה רצה ב-thread נפרד ולא מקפיאה את הממשק. במחשב בלי התקן שמע המשחק פשוט רץ בשקט (NFR-01).
 - הסאונד שייך לשכבת ה-View: המודל לא יודע עליו. הבקר מעביר את `GameSounds` למסכים, והבדיקות משתמשות במימוש השקט כדי לא להשמיע מוזיקה בזמן הרצת JUnit.
 
-כל הפרמטרים שמשתנים בין רמות נמצאים ב-`Difficulty`, והחוקים המשותפים לכל הרמות נמצאים ב-`GameRules` (NFR-05).
+כל הפרמטרים שמשתנים בין רמות נמצאים ב-`Difficulty`, והחוקים המשותפים לכל הרמות נמצאים ב-`GameRules` (NFR-05). גם קוביית המכפיל של כל רמה מוגדרת שם (`multiplierDie`): בקלה `NONE`, בבינונית `BOOST`, בקשה `ULTRA_BOOST`.
+
+## איטרציה 2 – קוביות ותורות (גל)
+
+| דרישה | איפה בקוד |
+|---|---|
+| FR-15 – קוביות Boost ו-UltraBoost | `MultiplierDie`, `Dice.rollMultiplier` |
+| FR-16, FR-17 – חישוב צעדים: מכפלה במסלול, קובייה רגילה בלבד במסלול הבית | `DiceRoll.trackSteps/homePathSteps`, `MoveValidator.stepsFor` |
+| FR-19, FR-20 – חוק ה-6 לפי הקובייה הרגילה בלבד | `DiceRoll.isSix`, `TurnManager.afterRoll` |
+| FR-21, FR-44 – הטלת UltraBoost מיוחדת | `TurnManager.grantSpecialRoll`, `SurpriseUltraBoostThrow` |
+| FR-22, FR-43 – הפסד התור הבא | `TurnManager.loseNextTurn`, דילוג ב-`TurnManager.passTurn` |
+
+**ממשק למנגנון ההפתעות:** ההפתעות משנות תורות רק דרך שתי מתודות: `TurnManager.grantSpecialRoll(state)` ו-`TurnManager.loseNextTurn(state, player)`. קוראים להן בזמן הנחיתה על המשבצת, לפני שהמהלך מסתיים. את שאר ההחלטות (מתי ההטלה המיוחדת מגיעה, ביטול ההטלה הנוספת, דילוג על התור) `GameEngine` ו-`TurnManager` כבר מבצעים.
+
+**החלטה שלנו שלא כתובה בקבצי הקורס:** אם המהלך שהגיע למשבצת ההפתעה בוצע עם 6, ההטלה הנוספת מה-6 נשמרת ומגיעה אחרי ההטלה המיוחדת (לפי FR-19, הזכאות להטלה נוספת נשמרת).
 
 ## חלוקת הקבצים לפי משימות ה-SDP
 
@@ -61,5 +79,5 @@
 |---|---|---|
 | דור | `Controller/*`, `View/*`, קבצי Eclipse | 3.4.1–3.4.2, FR-01–05, FR-15, FR-23, FR-48–49 (צד התצוגה) |
 | עומר | `Difficulty`, `GameRules`, `SetupValidator`, `Player`, `PlayerColor`, `Piece`, `Position`, `Cell`, `CellType`, `Board`, `BoardFactory`, `InteractionRules` | FR-01–11, FR-14, FR-28–30, FR-32 |
-| גל | `Dice`, `DiceRoll`, `TurnManager`, `RankingManager`, `GameClock`, `GameResult`, `GameListener`, `GameEngine` (זרימת התור) | FR-15–20, FR-45–48 |
+| גל | `Dice`, `DiceRoll`, `TurnManager`, `RankingManager`, `GameClock`, `GameResult`, `GameListener`, `GameEngine` (זרימת התור). איטרציה 2: `MultiplierDie`, `DiceThrow` ותתי-המחלקות שלה, `ThrowResult`, `TurnState` | FR-15–22, FR-45–48 |
 | דיאנה | `MoveValidator`, `Move`, `GameState`, `GameEngine` (ביצוע מהלך ואכילה) | FR-23–27, FR-31 |

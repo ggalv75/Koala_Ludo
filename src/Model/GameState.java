@@ -14,7 +14,7 @@ public final class GameState {
     private final List<Player> players;
     private final List<Piece> pieces;
     private int currentPlayerIndex;
-    private int consecutiveSixes;
+    private final TurnState turnState = new TurnState();
     private DiceRoll lastRoll;
     private DiceRoll latestRoll;
     private Phase phase = Phase.WAITING_FOR_ROLL;
@@ -49,7 +49,15 @@ public final class GameState {
     /** Return the index of the active player. */
     public int currentPlayerIndex() { return currentPlayerIndex; }
     /** Return the current streak of successive sixes. */
-    public int consecutiveSixes() { return consecutiveSixes; }
+    public int consecutiveSixes() { return turnState.consecutiveSixes(); }
+    /** FR-21: true when the current player's next throw is the UltraBoost surprise throw. */
+    public boolean specialRollPending() { return turnState.specialRollPending(); }
+    /** FR-15, FR-21: the multiplier die of the next throw (UltraBoost when the surprise throw is pending). */
+    public MultiplierDie nextThrowMultiplier() {
+        return specialRollPending() ? MultiplierDie.ULTRA_BOOST : difficulty().multiplierDie();
+    }
+    /** FR-22: true when the player will lose their next turn. */
+    public boolean losesNextTurn(Player player) { return turnState.losesNextTurn(player.index()); }
     /** Return the roll awaiting a piece move, or null when no roll is active. */
     public DiceRoll lastRoll() { return lastRoll; }
     /** Return the last actual die result, including between turns. */
@@ -104,7 +112,9 @@ public final class GameState {
     /** Update the active player as part of turn management. */
     void setCurrentPlayerIndex(int index) { this.currentPlayerIndex = index; }
     /** Update the current six-roll streak. */
-    void setConsecutiveSixes(int count) { this.consecutiveSixes = count; }
+    void setConsecutiveSixes(int count) { turnState.setConsecutiveSixes(count); }
+    /** Turn bookkeeping, changed only through {@link TurnManager}. */
+    TurnState turnState() { return turnState; }
     /** Update the active roll and retain non-null results for the persistent die display. */
     void setLastRoll(DiceRoll roll) {
         this.lastRoll = roll;
