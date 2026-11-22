@@ -8,7 +8,9 @@ import java.util.Objects;
 import java.util.Random;
 
 /**
- * Creator responsible for building boards from board layouts.
+ * Factory Method creator for Easy and Medium game boards.
+ * Builds board layouts and places random SAFE squares.
+ * Implements board construction requirements FR-07–FR-14.
  */
 public abstract class BoardFactory {
     protected BoardFactory() {}

@@ -316,12 +316,8 @@ public final class BoardCanvas extends JPanel {
 		    case ARROW, REGULAR -> Theme.SURFACE;
 		};
 		
-		if (board.difficulty() == Difficulty.MEDIUM && c.type() == CellType.REGULAR) {
-		    for (PlayerColor color : PlayerColor.values()) {
-		    	if (c.type() == CellType.REGULAR && c.color() != null) {
-		    	    fill = Theme.boardPathColorOf(c.color());
-		    	}
-		    }
+		if (board.difficulty() == Difficulty.MEDIUM && c.type() == CellType.REGULAR && c.color() != null) {
+		    fill = Theme.boardPathColorOf(c.color());
 		}
 
         g.setColor(fill);

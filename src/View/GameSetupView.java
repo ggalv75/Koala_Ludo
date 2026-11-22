@@ -267,7 +267,7 @@ public final class GameSetupView extends JPanel {
 	}
 
 	private JToggleButton createDifficultyButton(Difficulty difficulty) {
-		JToggleButton button = new JToggleButton(difficulty == Difficulty.EASY ? "קלה" : "בינונית");
+		JToggleButton button = new JToggleButton(difficulty.displayName());
 	    button.setName("difficulty-" + difficulty.name());
 	    button.setFont(Theme.font(14, true));
 	    button.setFocusPainted(false);

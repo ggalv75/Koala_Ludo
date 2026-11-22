@@ -1,7 +1,8 @@
 package Model;
 
 /**
- * Difficulty-specific board settings and multiplier dice.
+ * Centralized difficulty-specific board settings (FR-07–FR-14)
+ * and multiplier die selection (FR-15).
  */
 public enum Difficulty {
     EASY("קל", 15, 52, 5, 4, 4, MultiplierDie.NONE),
