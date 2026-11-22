@@ -293,7 +293,7 @@ public final class BoardCanvas extends JPanel {
         originY = (getHeight() - cell * n) / 2;
 
         for (PlayerColor color : PlayerColor.values()) drawCastle(g, board, color);
-        board.cells().forEach((position, c) -> drawCell(g, position, c));
+        board.cells().forEach((position, c) -> drawCell(g, board, position, c));
         drawBlocks(g);
         drawCenter(g, board);
         drawPathPreview(g, board);
@@ -321,34 +321,56 @@ public final class BoardCanvas extends JPanel {
     }
 
     /** Paint one board cell according to its semantic type. */
-    private void drawCell(Graphics2D g, Position position, Cell c) {
+    private void drawCell(
+            Graphics2D g, Board board, Position position, Cell c) {
+
         Rectangle r = rect(position);
 
-		Color fill = switch (c.type()) {
-		    case START, HOME -> Theme.boardPathColorOf(c.color());
-		    case SAFE, SURPRISE -> Theme.SAFE_SOFT;
-		    case ARROW, REGULAR -> Theme.SURFACE;
-		};
+        Color fill = switch (c.type()) {
+            case START, HOME -> Theme.boardPathColorOf(c.color());
+            case SAFE, SURPRISE -> Theme.SAFE_SOFT;
+            case ARROW, REGULAR -> Theme.SURFACE;
+        };
+
+        if (board.difficulty() == Difficulty.MEDIUM
+                && c.type() == CellType.REGULAR
+                && c.color() != null) {
+
+            fill = Theme.boardPathColorOf(c.color());
+        }
 
         g.setColor(fill);
         g.fillRect(r.x, r.y, r.width, r.height);
+
         g.setColor(Theme.BORDER);
         g.setStroke(new BasicStroke(1f));
         g.drawRect(r.x, r.y, r.width, r.height);
+
         int cx = r.x + r.width / 2;
         int cy = r.y + r.height / 2;
+
         switch (c.type()) {
-        	case START -> drawText(g, "#", cx, cy, Color.WHITE, (int) (cell * 0.7));
+            case START ->
+                    drawText(g, "#", cx, cy, Color.WHITE,
+                            (int) (cell * 0.7));
+
             case SAFE -> {
                 g.setColor(Theme.SAFE);
-                g.fill(star(cx, cy, cell * 0.38, cell * 0.16));
+                g.fill(star(
+                        cx, cy, cell * 0.38, cell * 0.16));
             }
-            case SURPRISE -> drawText(g, "!", cx, cy, Theme.INK, (int) (cell * 0.7));
-            case ARROW -> drawArrow(g, c.color(), cx, cy);
+
+            case SURPRISE ->
+                    drawText(g, "!", cx, cy, Theme.INK,
+                            (int) (cell * 0.7));
+
+            case ARROW ->
+                    drawArrow(
+                            g, board, position, c.color(), cx, cy);
+
             default -> { }
         }
     }
-
     /** Draw every active Double Block, including simultaneous owners on protected squares. */
     private void drawBlocks(Graphics2D g) {
         Map<Position, Set<Integer>> blocks = new LinkedHashMap<>();
@@ -378,24 +400,38 @@ public final class BoardCanvas extends JPanel {
             }
         }
     }
-
-	/** Paint the four finishing triangles according to the Easy board layout. */
-	private void drawCenter(Graphics2D g, Board board) {
-	    Rectangle r = rect(board.centerCorner());
-	    int d = cell * 3;
-	    int x = r.x;
-	    int y = r.y;
-	    int mx = x + d / 2;
-	    int my = y + d / 2;
 	
-	    fillTriangle(g, PlayerColor.GREEN, new int[]{x, x, mx}, new int[]{y, y + d, my});
-	    fillTriangle(g, PlayerColor.YELLOW, new int[]{x, x + d, mx}, new int[]{y, y, my});
-	    fillTriangle(g, PlayerColor.BLUE, new int[]{x + d, x + d, mx}, new int[]{y, y + d, my});
-	    fillTriangle(g, PlayerColor.RED, new int[]{x, x + d, mx}, new int[]{y + d, y + d, my});
+	/** Paint the center using the home-path positions defined by the board. */
+	private void drawCenter(Graphics2D g, Board board) {
+	    Position center = board.centerCorner();
+	    Rectangle r = rect(center);
+	    int d = cell * 3;
+	    int x = r.x, y = r.y;
+	    int mx = x + d / 2, my = y + d / 2;
+	
+	    PlayerColor left = homeColorAt(board, new Position(center.row() + 1, center.col() - 1));
+	    PlayerColor top = homeColorAt(board, new Position(center.row() - 1, center.col() + 1));
+	    PlayerColor right = homeColorAt(board, new Position(center.row() + 1, center.col() + 3));
+	    PlayerColor bottom = homeColorAt(board, new Position(center.row() + 3, center.col() + 1));
+	
+	    fillTriangle(g, left, new int[]{x, x, mx}, new int[]{y, y + d, my});
+	    fillTriangle(g, top, new int[]{x, x + d, mx}, new int[]{y, y, my});
+	    fillTriangle(g, right, new int[]{x + d, x + d, mx}, new int[]{y, y + d, my});
+	    fillTriangle(g, bottom, new int[]{x, x + d, mx}, new int[]{y + d, y + d, my});
 	
 	    g.setColor(Theme.BORDER);
 	    g.setStroke(new BasicStroke(1f));
 	    g.drawRect(x, y, d, d);
+	}
+	
+	/** Find the player whose home lane ends next to the requested center side. */
+	private PlayerColor homeColorAt(Board board, Position position) {
+	    for (PlayerColor color : PlayerColor.values()) {
+	        if (position.equals(board.positionOf(color, board.finishStep() - 1))) {
+	            return color;
+	        }
+	    }
+	    throw new IllegalStateException("Missing home path next to center: " + position);
 	}
 
     /** Fill one finishing triangle with a player color. */
@@ -490,8 +526,7 @@ public final class BoardCanvas extends JPanel {
     }
 
     /** Pulse the affected square to communicate shielding, blocking or block dissolution. */
-    private void drawSquareHalo(Graphics2D g, Position square, Color tint,
-                                double progress, int opacity, boolean dashed) {
+    private void drawSquareHalo(Graphics2D g, Position square, Color tint, double progress, int opacity, boolean dashed) {
         Rectangle r = rect(square);
         int margin = (int) Math.round(cell * (0.02 + progress * 0.16));
         g.setColor(alpha(tint, opacity));
@@ -773,13 +808,14 @@ public final class BoardCanvas extends JPanel {
     }
 
 	/** Draw an arrow pointing towards the player's private home path. */
-	private void drawArrow(Graphics2D g, PlayerColor color, int cx, int cy) {
-	    double angle = switch (color) {
-	        case GREEN -> 0;
-	        case YELLOW -> Math.PI / 2;
-	        case BLUE -> Math.PI;
-	        case RED -> -Math.PI / 2;
-	    };
+    private void drawArrow(Graphics2D g, Board board, Position position, PlayerColor color, int cx, int cy) {
+        List<Position> route = board.route(color);
+        int index = route.indexOf(position);
+        if (index < 0 || index + 1 >= route.size()) {
+            throw new IllegalStateException("Arrow is not on the player's route: " + position);
+        }
+        Position next = route.get(index + 1);
+        double angle = Math.atan2(next.row() - position.row(), next.col() - position.col());
 	
 	    double s = cell * 0.42;
 	    Path2D arrow = new Path2D.Double();
