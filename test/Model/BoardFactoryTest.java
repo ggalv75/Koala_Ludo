@@ -171,7 +171,8 @@ class BoardFactoryTest {
 	        assertEquals(8, board.count(CellType.ARROW));
 	        assertEquals(8, board.count(CellType.SAFE));
 	        assertEquals(20, board.count(CellType.HOME));
-	        assertEquals(96, board.count(CellType.REGULAR));
+	        assertEquals(94, board.count(CellType.REGULAR));
+            assertEquals(2, board.count(CellType.SURPRISE));
 	        assertEquals(110, board.homePathStart());
 	        assertEquals(115, board.finishStep());
 	
@@ -220,7 +221,8 @@ class BoardFactoryTest {
 	        }
 	
 	        for (Map.Entry<Position, Cell> entry : fixedCells.entrySet()) {
-	            if (!safe.contains(entry.getKey())) {
+	            if (!safe.contains(entry.getKey())
+                    && board.cellAt(entry.getKey()).type() != CellType.SURPRISE) {
 	                assertEquals(entry.getValue(), board.cellAt(entry.getKey()));
 	            }
 	        }

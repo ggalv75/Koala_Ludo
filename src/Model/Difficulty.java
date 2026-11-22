@@ -5,8 +5,8 @@ package Model;
  * and multiplier die selection (FR-15).
  */
 public enum Difficulty {
-    EASY("קל", 15, 52, 5, 4, 4, MultiplierDie.NONE),
-    MEDIUM("בינוני", 17, 116, 5, 8, 8, MultiplierDie.BOOST);
+    EASY("קל", 15, 52, 5, 4, 4, 0, MultiplierDie.NONE),
+    MEDIUM("בינוני", 17, 116, 5, 8, 8, 2, MultiplierDie.BOOST);
 
     private final String displayName;
     private final int boardSize;
@@ -14,15 +14,17 @@ public enum Difficulty {
     private final int homePathSquares;
     private final int arrowSquares;
     private final int safeSquares;
+    private final int surpriseSquares;
     private final MultiplierDie multiplierDie;
 
-    Difficulty(String displayName, int boardSize, int trackSquares, int homePathSquares, int arrowSquares, int safeSquares, MultiplierDie multiplierDie) {
+    Difficulty(String displayName, int boardSize, int trackSquares, int homePathSquares, int arrowSquares, int safeSquares, int surpriseSquares, MultiplierDie multiplierDie) {
         this.displayName = displayName;
         this.boardSize = boardSize;
         this.trackSquares = trackSquares;
         this.homePathSquares = homePathSquares;
         this.arrowSquares = arrowSquares;
         this.safeSquares = safeSquares;
+        this.surpriseSquares = surpriseSquares;
         this.multiplierDie = multiplierDie;
     }
 
@@ -32,6 +34,8 @@ public enum Difficulty {
     public int homePathSquares() { return homePathSquares; }
     public int arrowSquares() { return arrowSquares; }
     public int safeSquares() { return safeSquares; }
+    /** Number of randomly placed surprise squares (FR-13). */
+    public int surpriseSquares() { return surpriseSquares; }
     public MultiplierDie multiplierDie() { return multiplierDie; }
 
     @Override
