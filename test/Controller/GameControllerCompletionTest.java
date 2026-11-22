@@ -37,7 +37,7 @@ import View.GameBoardView;
 import View.GameSetupView;
 import View.GameSounds;
 import View.ResultsView;
-import View.SoundEffect;
+import View.GameSounds.SoundEffect;
 
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
