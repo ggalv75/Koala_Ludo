@@ -3,7 +3,7 @@ package View;
 import Model.Difficulty;
 import Model.GameRules;
 import Model.PlayerColor;
-
+import java.util.EnumMap;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import javax.swing.event.DocumentEvent;
@@ -21,7 +21,6 @@ import java.util.Objects;
  * Input validation and game rules remain in the Model.
  */
 public final class GameSetupView extends JPanel {
-
     private static final long serialVersionUID = 1L;
 
     @FunctionalInterface
@@ -45,6 +44,8 @@ public final class GameSetupView extends JPanel {
     private final JLabel errorLabel = new JLabel();
 
     private int playerCount = GameRules.MIN_PLAYERS;
+    private Difficulty selectedDifficulty = Difficulty.EASY;
+    private final EnumMap<Difficulty, JToggleButton> difficultyButtons = new EnumMap<>(Difficulty.class);
 
     // Initializes the game setup screen and connects navigation callbacks
 	public GameSetupView(StartListener onStart, Runnable onBack) {
@@ -237,41 +238,60 @@ public final class GameSetupView extends JPanel {
         return panel;
     }
 
-    private JPanel createDifficultyPanel() {
-        JPanel panel = new JPanel(new BorderLayout(0, 9));
-        panel.setOpaque(false);
-        panel.add(label("רמת קושי", 13, true, MUTED), BorderLayout.NORTH);
+	private JPanel createDifficultyPanel() {
+	    JPanel panel = new JPanel(new BorderLayout(0, 9));
+	    panel.setOpaque(false);
+	    panel.add(label("רמת קושי", 13, true, MUTED), BorderLayout.NORTH);
+	
+	    JPanel levels = new JPanel(new GridLayout(1, 3, 8, 0));
+	    levels.setOpaque(false);
+	    levels.add(createDifficultyButton(Difficulty.EASY));
+	    levels.add(createDifficultyButton(Difficulty.MEDIUM));
+	    levels.add(createDifficultyCard("קשה", "בקרוב"));
+	
+	    panel.add(levels, BorderLayout.CENTER);
+	    refreshDifficultyButtons();
+	    return panel;
+	}
 
-        JPanel levels = new JPanel(new GridLayout(1, 3, 8, 0));
-        levels.setOpaque(false);
+	private JPanel createDifficultyCard(String title, String description) {
+	    RoundedPanel card = new RoundedPanel(new GridLayout(2, 1, 0, 2), ROW_BACKGROUND, BORDER, 10);
+	    card.setName("difficulty-" + title);
+	    JLabel heading = label("נעול · " + title, 14, true, MUTED);
+	    heading.setHorizontalAlignment(SwingConstants.CENTER);
+	    JLabel hint = label(description, 11, false, MUTED);
+	    hint.setHorizontalAlignment(SwingConstants.CENTER);
+	    card.add(heading);
+	    card.add(hint);
+	    return card;
+	}
 
-        levels.add(createDifficultyCard("קלה", "זמינה", true));
-        levels.add(createDifficultyCard("בינונית", "בקרוב", false));
-        levels.add(createDifficultyCard("קשה", "בקרוב", false));
-
-        panel.add(levels, BorderLayout.CENTER);
-        return panel;
-    }
-
-    private JPanel createDifficultyCard(String title, String description, boolean available) {
-        Color background = available ? new Color(232, 247, 239) : ROW_BACKGROUND;
-        Color outline = available ? GREEN : BORDER;
-
-        RoundedPanel card = new RoundedPanel(new GridLayout(2, 1, 0, 2), background, outline, 10);
-        card.setName("difficulty-" + title);
-
-        JLabel heading = label((available ? "✓ " : "נעול · ") + title, 14, true, available ? GREEN_DARK : MUTED);
-        heading.setHorizontalAlignment(SwingConstants.CENTER);
-
-        JLabel hint = label(description, 11, false, MUTED);
-        hint.setHorizontalAlignment(SwingConstants.CENTER);
-
-        card.add(heading);
-        card.add(hint);
-        card.setToolTipText(available ? "רמה קלה זמינה באיטרציה הנוכחית" : "הרמה תהיה זמינה באיטרציה עתידית");
-
-        return card;
-    }
+	private JToggleButton createDifficultyButton(Difficulty difficulty) {
+		JToggleButton button = new JToggleButton(difficulty.displayName());
+	    button.setName("difficulty-" + difficulty.name());
+	    button.setFont(Theme.font(14, true));
+	    button.setFocusPainted(false);
+	    button.setOpaque(true);
+	    button.addActionListener(e -> {
+	    	selectedDifficulty = difficulty;
+	        refreshDifficultyButtons();
+	        clearError();
+	    });
+	    difficultyButtons.put(difficulty, button);
+	    return button;
+	}
+		
+	private void refreshDifficultyButtons() {
+	    for (var entry : difficultyButtons.entrySet()) {
+	        Difficulty difficulty = entry.getKey();
+	        JToggleButton button = entry.getValue();
+	        boolean selected = difficulty == selectedDifficulty;
+	        button.setSelected(selected);
+	        button.setBackground(selected ? new Color(232, 247, 239) : ROW_BACKGROUND);
+	        button.setForeground(selected ? GREEN_DARK : MUTED);
+	        button.setBorder(BorderFactory.createLineBorder(selected ? GREEN : BORDER));	       
+	    }
+	}
 
     private JPanel createPlayersSection() {
         RoundedPanel card = new RoundedPanel(new BorderLayout(0, 13), Color.WHITE, BORDER, 18);
@@ -378,7 +398,7 @@ public final class GameSetupView extends JPanel {
 	    startButton.setMinimumSize(new Dimension(185, 50));
 	    startButton.setMaximumSize(new Dimension(185, 50));
 	
-	    startButton.addActionListener(e -> onStart.onStart(Difficulty.EASY, getSelectedNames(), getSelectedColors()));
+	    startButton.addActionListener(e -> onStart.onStart(selectedDifficulty, getSelectedNames(), getSelectedColors()));
 	
 	    JPanel buttonWrapper = new JPanel(new FlowLayout(FlowLayout.LEADING, 0, 0));
 	    buttonWrapper.setOpaque(false);
