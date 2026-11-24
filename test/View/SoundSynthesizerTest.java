@@ -5,6 +5,8 @@ import static org.junit.jupiter.api.Assertions.*;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import View.GameSounds.SoundEffect;
+
 /** The generated audio has the right length, never clips and loops without a click. */
 class SoundSynthesizerTest {
 

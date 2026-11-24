@@ -22,6 +22,7 @@ import Model.GameState;
 import Model.Move;
 import Model.Piece;
 import Model.PlayerColor;
+import View.GameSounds.SoundEffect;
 
 /** Screens ask for the right sounds at the right moments and the switches work. */
 class GameSoundsTest {

@@ -1,5 +1,7 @@
 package View;
 
+import View.GameSounds.SoundEffect;
+
 import javax.sound.sampled.AudioFormat;
 import java.util.Random;
 
