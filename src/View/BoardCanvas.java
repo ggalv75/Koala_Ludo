@@ -76,7 +76,7 @@ public final class BoardCanvas extends JPanel {
         updateHover(-1);
         if (committedMove != null && animationsEnabled) {
             Piece piece = state.piece(committedMove.pieceId());
-            int legs = committedMove.release() ? 1 : Math.max(1, committedMove.toStep() - committedMove.fromStep());
+            int legs = committedMove.release() ? 1 : Math.max(1, Math.abs(committedMove.toStep() - committedMove.fromStep()));
             long duration = committedMove.release() ? RELEASE_DURATION_NS : legs * LEG_DURATION_NS;
             motion = new Motion(committedMove, piece.color(), System.nanoTime(), duration);
             landedSquares = 0;
@@ -201,8 +201,9 @@ public final class BoardCanvas extends JPanel {
         }
     }
 
+    /** Count all visual steps regardless of movement direction. */
     private static int legsOf(Move move) {
-        return move.release() ? 1 : Math.max(1, move.toStep() - move.fromStep());
+        return move.release() ? 1 : Math.max(1, Math.abs(move.toStep() - move.fromStep()));
     }
 
     /** Start the player-wide celebration only after the last pawn's effects finish. */
@@ -306,19 +307,22 @@ public final class BoardCanvas extends JPanel {
         g.drawRoundRect(r.x + 2, r.y + 2, size - 4, size - 4, cell, cell);
     }
 
-    /** Paint one board cell according to its semantic type. */
+    /** Paint one board cell according to its semantic type, including questions. */
     private void drawCell(Graphics2D g, Board board, Position position, Cell c) {
         Rectangle r = rect(position);
 
-		Color fill = switch (c.type()) {
-		    case START, HOME -> Theme.boardPathColorOf(c.color());
-		    case SAFE -> Theme.SAFE_SOFT;
-		    case ARROW, REGULAR -> Theme.SURFACE;
-		};
-		
-		if (board.difficulty() == Difficulty.MEDIUM && c.type() == CellType.REGULAR && c.color() != null) {
-		    fill = Theme.boardPathColorOf(c.color());
-		}
+        Color fill = switch (c.type()) {
+            case START, HOME -> Theme.boardPathColorOf(c.color());
+            case SAFE -> Theme.SAFE_SOFT;
+            case ARROW, REGULAR -> Theme.SURFACE;
+            case QUESTION_EASY -> new Color(210, 245, 210);
+            case QUESTION_MEDIUM -> new Color(255, 245, 180);
+            case QUESTION_HARD -> new Color(255, 210, 210);
+        };
+
+        if (board.difficulty() == Difficulty.MEDIUM && c.type() == CellType.REGULAR && c.color() != null) {
+            fill = Theme.boardPathColorOf(c.color());
+        }
 
         g.setColor(fill);
         g.fillRect(r.x, r.y, r.width, r.height);
@@ -328,11 +332,13 @@ public final class BoardCanvas extends JPanel {
         int cx = r.x + r.width / 2;
         int cy = r.y + r.height / 2;
         switch (c.type()) {
-        	case START -> drawText(g, "#", cx, cy, Color.WHITE, (int) (cell * 0.7));
+            case START -> drawText(g, "#", cx, cy, Color.WHITE, (int) (cell * 0.7));
             case SAFE -> {
                 g.setColor(Theme.SAFE);
                 g.fill(star(cx, cy, cell * 0.38, cell * 0.16));
             }
+            case QUESTION_EASY, QUESTION_MEDIUM, QUESTION_HARD ->
+                    drawText(g, "?", cx, cy, Color.BLACK, (int) (cell * 0.7));
             case ARROW -> drawArrow(g, board, position, c.color(), cx, cy);
             default -> { }
         }
@@ -367,45 +373,45 @@ public final class BoardCanvas extends JPanel {
             }
         }
     }
-	
-	/** Paint the center using the home-path positions defined by the board. */
-	private void drawCenter(Graphics2D g, Board board) {
-	    Position center = board.centerCorner();
-	    Rectangle r = rect(center);
-	    int d = cell * 3;
-	    int x = r.x, y = r.y;
-	    int mx = x + d / 2, my = y + d / 2;
-	
-	    PlayerColor left = homeColorAt(board, new Position(center.row() + 1, center.col() - 1));
-	    PlayerColor top = homeColorAt(board, new Position(center.row() - 1, center.col() + 1));
-	    PlayerColor right = homeColorAt(board, new Position(center.row() + 1, center.col() + 3));
-	    PlayerColor bottom = homeColorAt(board, new Position(center.row() + 3, center.col() + 1));
-	
-	    fillTriangle(g, left, new int[]{x, x, mx}, new int[]{y, y + d, my});
-	    fillTriangle(g, top, new int[]{x, x + d, mx}, new int[]{y, y, my});
-	    fillTriangle(g, right, new int[]{x + d, x + d, mx}, new int[]{y, y + d, my});
-	    fillTriangle(g, bottom, new int[]{x, x + d, mx}, new int[]{y + d, y + d, my});
-	
-	    g.setColor(Theme.BORDER);
-	    g.setStroke(new BasicStroke(1f));
-	    g.drawRect(x, y, d, d);
-	}
-	
-	/** Find the player whose home lane ends next to the requested center side. */
-	private PlayerColor homeColorAt(Board board, Position position) {
-	    for (PlayerColor color : PlayerColor.values()) {
-	        if (position.equals(board.positionOf(color, board.finishStep() - 1))) {
-	            return color;
-	        }
-	    }
-	    throw new IllegalStateException("Missing home path next to center: " + position);
-	}
+
+    /** Paint the center using the home-path positions defined by the board. */
+    private void drawCenter(Graphics2D g, Board board) {
+        Position center = board.centerCorner();
+        Rectangle r = rect(center);
+        int d = cell * 3;
+        int x = r.x, y = r.y;
+        int mx = x + d / 2, my = y + d / 2;
+
+        PlayerColor left = homeColorAt(board, new Position(center.row() + 1, center.col() - 1));
+        PlayerColor top = homeColorAt(board, new Position(center.row() - 1, center.col() + 1));
+        PlayerColor right = homeColorAt(board, new Position(center.row() + 1, center.col() + 3));
+        PlayerColor bottom = homeColorAt(board, new Position(center.row() + 3, center.col() + 1));
+
+        fillTriangle(g, left, new int[]{x, x, mx}, new int[]{y, y + d, my});
+        fillTriangle(g, top, new int[]{x, x + d, mx}, new int[]{y, y, my});
+        fillTriangle(g, right, new int[]{x + d, x + d, mx}, new int[]{y, y + d, my});
+        fillTriangle(g, bottom, new int[]{x, x + d, mx}, new int[]{y + d, y + d, my});
+
+        g.setColor(Theme.BORDER);
+        g.setStroke(new BasicStroke(1f));
+        g.drawRect(x, y, d, d);
+    }
+
+    /** Find the player whose home lane ends next to the requested center side. */
+    private PlayerColor homeColorAt(Board board, Position position) {
+        for (PlayerColor color : PlayerColor.values()) {
+            if (position.equals(board.positionOf(color, board.finishStep() - 1))) {
+                return color;
+            }
+        }
+        throw new IllegalStateException("Missing home path next to center: " + position);
+    }
 
     /** Fill one finishing triangle with a player color. */
-	private void fillTriangle(Graphics2D g, PlayerColor color, int[] xs, int[] ys) {
-	    g.setColor(Theme.boardPathColorOf(color));
-	    g.fillPolygon(xs, ys, 3);
-	}
+    private void fillTriangle(Graphics2D g, PlayerColor color, int[] xs, int[] ys) {
+        g.setColor(Theme.boardPathColorOf(color));
+        g.fillPolygon(xs, ys, 3);
+    }
 
     /** Paint visible pieces, respecting temporary animation sprites. */
     private void drawPieces(Graphics2D g, Board board) {
@@ -505,21 +511,21 @@ public final class BoardCanvas extends JPanel {
                 r.height + margin * 2, 12, 12);
     }
 
-	/** Position finished pieces inside their matching colored triangle. */
-	private Point finishSpot(Board board, PlayerColor color, int k) {
-	    Rectangle r = rect(board.centerCorner());
-	    double cx = r.x + cell * 1.5;
-	    double cy = r.y + cell * 1.5;
-	    double offset = cell * 0.85;
-	    double along = (k - 1.5) * cell * 0.38;
-	
-	    return switch (color) {
-	        case GREEN -> new Point((int) (cx - offset), (int) (cy + along));
-	        case YELLOW -> new Point((int) (cx + along), (int) (cy - offset));
-	        case BLUE -> new Point((int) (cx + offset), (int) (cy + along));
-	        case RED -> new Point((int) (cx + along), (int) (cy + offset));
-	    };
-	}
+    /** Position finished pieces inside their matching colored triangle. */
+    private Point finishSpot(Board board, PlayerColor color, int k) {
+        Rectangle r = rect(board.centerCorner());
+        double cx = r.x + cell * 1.5;
+        double cy = r.y + cell * 1.5;
+        double offset = cell * 0.85;
+        double along = (k - 1.5) * cell * 0.38;
+
+        return switch (color) {
+            case GREEN -> new Point((int) (cx - offset), (int) (cy + along));
+            case YELLOW -> new Point((int) (cx + along), (int) (cy - offset));
+            case BLUE -> new Point((int) (cx + offset), (int) (cy + along));
+            case RED -> new Point((int) (cx + along), (int) (cy + offset));
+        };
+    }
 
     /** Paint a numbered koala piece with its pulsing legal-move highlight. */
     private void drawPiece(Graphics2D g, Piece piece, int x, int y, int radius) {
@@ -574,7 +580,8 @@ public final class BoardCanvas extends JPanel {
         Motion anim = motion;
         Move move = anim.move();
         Piece piece = state.piece(move.pieceId());
-        int legs = move.release() ? 1 : Math.max(1, move.toStep() - move.fromStep());
+        int legs = move.release() ? 1 : Math.max(1, Math.abs(move.toStep() - move.fromStep()));
+        int direction = Integer.compare(move.toStep(), move.fromStep());
         double progress = Math.min(1.0, Math.max(0.0,
                 (double) (System.nanoTime() - anim.startedAt()) / anim.duration()));
         double travelled = progress * legs;
@@ -583,8 +590,8 @@ public final class BoardCanvas extends JPanel {
 
         Point a = (move.release() && leg == 0)
                 ? castleSlot(board, piece)
-                : anchor(board, piece, move.fromStep() + leg);
-        Point b = anchor(board, piece, move.release() ? 0 : move.fromStep() + leg + 1);
+                : anchor(board, piece, move.fromStep() + leg * direction);
+        Point b = anchor(board, piece, move.release() ? 0 : move.fromStep() + (leg + 1) * direction);
         int x = (int) Math.round(a.x + (b.x - a.x) * t);
         int y = (int) Math.round(a.y + (b.y - a.y) * t - Math.sin(t * Math.PI) * cell * 0.15);
         int trackRadius = Math.max(5, (int) (cell * 0.34));
@@ -735,7 +742,7 @@ public final class BoardCanvas extends JPanel {
         g.drawString(text, cx - fm.stringWidth(text) / 2, cy + (fm.getAscent() - fm.getDescent()) / 2);
     }
 
-	/** Draw an arrow pointing towards the player's private home path. */
+    /** Draw an arrow pointing towards the player's private home path. */
     private void drawArrow(Graphics2D g, Board board, Position position, PlayerColor color, int cx, int cy) {
         List<Position> route = board.route(color);
         int index = route.indexOf(position);
@@ -744,26 +751,26 @@ public final class BoardCanvas extends JPanel {
         }
         Position next = route.get(index + 1);
         double angle = Math.atan2(next.row() - position.row(), next.col() - position.col());
-	
-	    double s = cell * 0.42;
-	    Path2D arrow = new Path2D.Double();
-	
-	    arrow.moveTo(-s, -s * 0.28);
-	    arrow.lineTo(s * 0.2, -s * 0.28);
-	    arrow.lineTo(s * 0.2, -s * 0.7);
-	    arrow.lineTo(s, 0);
-	    arrow.lineTo(s * 0.2, s * 0.7);
-	    arrow.lineTo(s * 0.2, s * 0.28);
-	    arrow.lineTo(-s, s * 0.28);
-	    arrow.closePath();
-	
-	    Graphics2D rotated = (Graphics2D) g.create();
-	    rotated.translate(cx, cy);
-	    rotated.rotate(angle);
-	    rotated.setColor(Theme.boardArrowColorOf(color));
-	    rotated.fill(arrow);
-	    rotated.dispose();
-	}
+
+        double s = cell * 0.42;
+        Path2D arrow = new Path2D.Double();
+
+        arrow.moveTo(-s, -s * 0.28);
+        arrow.lineTo(s * 0.2, -s * 0.28);
+        arrow.lineTo(s * 0.2, -s * 0.7);
+        arrow.lineTo(s, 0);
+        arrow.lineTo(s * 0.2, s * 0.7);
+        arrow.lineTo(s * 0.2, s * 0.28);
+        arrow.lineTo(-s, s * 0.28);
+        arrow.closePath();
+
+        Graphics2D rotated = (Graphics2D) g.create();
+        rotated.translate(cx, cy);
+        rotated.rotate(angle);
+        rotated.setColor(Theme.boardArrowColorOf(color));
+        rotated.fill(arrow);
+        rotated.dispose();
+    }
 
     /** Create the star shape used for protected squares. */
     private static Shape star(double cx, double cy, double outer, double inner) {

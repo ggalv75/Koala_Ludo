@@ -1,18 +1,24 @@
 package Model;
 
-/** Square types used at the Easy level (Ludo Project-V2, pp. 2-3). */
+/** Types of cells supported by the Easy and Medium Ludo boards. */
 public enum CellType {
     REGULAR,
-    /** FR-08: a player's entry square, marked with #. */
+    /** Entry square for a pawn, marked with #. */
     START,
-    /** FR-10: leads a piece of the same colour into its home path. */
+    /** Direction change into the player's home lane. */
     ARROW,
-    /** FR-11: marked with a star. */
+    /** Protected star square. */
     SAFE,
-    /** FR-09: a square of a coloured home path. */
-    HOME;
+    /** Part of the owner's home lane. */
+    HOME,
+    /** FR-33: green, easy question square. */
+    QUESTION_EASY,
+    /** FR-33: yellow, medium question square. */
+    QUESTION_MEDIUM,
+    /** FR-33: red, hard question square. */
+    QUESTION_HARD;
 
-    /** FR-08, FR-09, FR-29: pieces on start, safe and home squares cannot be captured. */
+    /** Only the explicitly protected cells prevent captures. */
     public boolean isProtected() {
         return this == START || this == SAFE || this == HOME;
     }
