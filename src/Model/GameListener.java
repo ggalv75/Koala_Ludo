@@ -1,6 +1,6 @@
 package Model;
 
-/** Observer events isolate game rules from animations (MVC, SRS 3.4.2). */
+/** Observer events isolate game rules from animations and question dialogs (MVC, SRS 3.4.2). */
 public interface GameListener {
     /** Notify listeners about a committed piece movement before the state refresh. */
     default void onPieceMoved(Move move) { }
@@ -10,6 +10,12 @@ public interface GameListener {
 
     /** Announce a player who finished all four pieces and received a final place. */
     default void onPlayerFinished(PlayerFinishEvent event) { }
+
+    /** FR-33–FR-35: notify observers when a piece must answer a new question. */
+    default void onQuestionRequested(Question question, int pieceId) { }
+
+    /** FR-36: publish the chosen answer's correctness without exposing the answer key. */
+    default void onQuestionAnswered(QuestionService.AnswerResult result, int pieceId) { }
 
     /** Notify listeners that the current game state has changed. */
     default void onStateChanged(GameState state) { }

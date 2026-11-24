@@ -2,21 +2,24 @@ package Model;
 
 import java.time.Clock;
 import java.util.*;
+import java.util.function.Function;
 
 /**
  * Entry point to the game rules (Facade design pattern) and subject of the Observer pattern.
- * The Controller calls {@link #rollDice()} and {@link #movePiece(int)}; registered
- * {@link GameListener}s (the views) are notified after every change.
- * Invalid actions never throw: they only produce a message for the player (NFR-01).
+ * The Controller calls game actions; registered GameListeners observe committed changes.
+ * Invalid player actions produce feedback instead of terminating the game (NFR-01).
  */
 public final class GameEngine {
     private final GameState state;
-    /** Template Method: the level's regular throw (step die only at Easy, plus Boost/UltraBoost above). */
+    /** Gal's original Template Method dice logic is preserved. */
     private final DiceThrow regularThrow;
-    /** Template Method: the UltraBoost surprise throw (FR-21), the same at every level. */
+    /** Gal's UltraBoost surprise die is preserved. */
     private final DiceThrow surpriseThrow;
     private final GameClock gameClock;
     private final List<GameListener> listeners = new ArrayList<>();
+    private QuestionService questionService;
+    private Function<Position, Optional<QuestionLevel>> questionLevelResolver;
+    private QuestionMovementRules questionMovementRules;
 
     /** Initialize a game with validated players and deterministic dependencies. */
     public GameEngine(Difficulty difficulty, List<String> names, List<PlayerColor> colors) {
@@ -52,14 +55,53 @@ public final class GameEngine {
     /** Unregister a previously added observer. */
     public void removeListener(GameListener listener) { listeners.remove(listener); }
 
-    /**
-     * FR-15 to FR-21: rolls the dice and works out what the player may do. The steps of the
-     * throw are fixed in {@link DiceThrow#perform} (Template Method); here we only choose which
-     * throw it is and react to the outcome.
-     */
+    /** Configure questions using the exact answer movement specified in Ludo Project-V2, p. 4. */
+    public void configureQuestions(QuestionService service) {
+        configureQuestions(service, this::questionLevelFromBoard, QuestionMovementRules.projectRules());
+    }
+
+    /** Configure question logic with explicitly approved forward movement rules. */
+    public void configureQuestions(QuestionService service, QuestionMovementRules movementRules) {
+        configureQuestions(service, this::questionLevelFromBoard, movementRules);
+    }
+
+    /** Inject square detection for deterministic tests and future board configurations. */
+    void configureQuestions(QuestionService service,
+                            Function<Position, Optional<QuestionLevel>> resolver) {
+        configureQuestions(service, resolver, QuestionMovementRules.projectRules());
+    }
+
+    /** Configure a question resolver and movement rules before the first die roll. */
+    void configureQuestions(QuestionService service, Function<Position, Optional<QuestionLevel>> resolver,
+                            QuestionMovementRules movementRules) {
+        if (questionService != null) throw new IllegalStateException("Questions already configured");
+        if (state.phase() != GameState.Phase.WAITING_FOR_ROLL || state.latestRoll() != null) {
+            throw new IllegalStateException("Configure questions before the first roll");
+        }
+        questionService = Objects.requireNonNull(service, "service");
+        questionLevelResolver = Objects.requireNonNull(resolver, "resolver");
+        questionMovementRules = Objects.requireNonNull(movementRules, "movementRules");
+    }
+
+    /** FR-33: resolve Medium-board question squares to their matching difficulty. */
+    private Optional<QuestionLevel> questionLevelFromBoard(Position position) {
+        if (position == null) return Optional.empty();
+        Cell cell = state.board().cellAt(position);
+        if (cell == null) return Optional.empty();
+        return switch (cell.type()) {
+            case QUESTION_EASY -> Optional.of(QuestionLevel.EASY);
+            case QUESTION_MEDIUM -> Optional.of(QuestionLevel.MEDIUM);
+            case QUESTION_HARD -> Optional.of(QuestionLevel.HARD);
+            default -> Optional.empty();
+        };
+    }
+
+    /** Roll with Gal's Template Method dice and pause safely during a question. */
     public void rollDice() {
         if (state.phase() != GameState.Phase.WAITING_FOR_ROLL) {
-            rejectAction("בחר כלי לפני הטלה נוספת.");
+            rejectAction(state.phase() == GameState.Phase.WAITING_FOR_QUESTION_ANSWER ||
+                    state.phase() == GameState.Phase.WAITING_FOR_QUESTION_EFFECT
+                    ? "יש להשלים את השאלה לפני ההטלה הבאה." : "בחר כלי לפני הטלה נוספת.");
             return;
         }
         state.setFeedbackMessage(null);
@@ -99,7 +141,9 @@ public final class GameEngine {
     /** Reject illegal selections or commit exactly one approved move. */
     public boolean movePiece(int pieceId) {
         if (state.phase() != GameState.Phase.WAITING_FOR_MOVE) {
-            rejectAction("הטל קובייה לפני בחירת כלי.");
+            rejectAction(state.phase() == GameState.Phase.WAITING_FOR_QUESTION_ANSWER ||
+                    state.phase() == GameState.Phase.WAITING_FOR_QUESTION_EFFECT
+                    ? "יש להשלים את השאלה לפני בחירת כלי נוסף." : "הטל קובייה לפני בחירת כלי.");
             return false;
         }
         Optional<Move> move = state.legalMoves().stream().filter(m -> m.pieceId() == pieceId).findFirst();
@@ -112,8 +156,19 @@ public final class GameEngine {
         return true;
     }
 
-    /** Apply one validated move and record its interaction effects for the View. */
+    /** Apply a normal die move using the same interaction logic as question-induced moves. */
     private void apply(Move move) {
+        Player player = state.currentPlayer();
+        CommittedMove committed = commitMove(move);
+        completeMove(move, player, committed);
+    }
+
+    /** Return movement events and the new landing position after all interaction rules run. */
+    private record CommittedMove(Piece piece, Position destination,
+                                 PieceInteractionEvent interaction, PlayerFinishEvent finish) { }
+
+    /** Commit one validated movement with capture, protection, Double Block and ranking rules. */
+    private CommittedMove commitMove(Move move) {
         Player player = state.currentPlayer();
         Piece piece = state.piece(move.pieceId());
         Position from = state.positionOf(piece);
@@ -130,31 +185,98 @@ public final class GameEngine {
             state.log(player.name() + " אכל כלי של " + state.players().get(victim.ownerIndex()).name() + "!");
         }
         Position protection = InteractionRules.sharesProtectedSquareWithOpponent(state, piece) ? to : null;
-        Position blockedBy = move.partial() ? state.board().positionOf(piece.color(), move.toStep() + 1) : null;
-        PieceInteractionEvent interaction = new PieceInteractionEvent(capture, protection, blockedBy, changesToBlocks(before));
-        if (state.isFinished(piece)) {
-            state.log(player.name() + " הכניס כלי לבית הסיום!");
-        }
-        PlayerFinishEvent playerFinish = rankIfAllPiecesHome(player);
-        boolean gameOver = endTurnAfterMove(player, playerFinish != null);
-        notifyMoved(move, interaction, playerFinish);
-        if (gameOver) {
-            for (GameListener listener : List.copyOf(listeners)) listener.onGameOver(state.result());
-        }
+        int direction = Integer.compare(move.toStep(), move.fromStep());
+        Position blockedBy = move.partial()
+                ? state.board().positionOf(piece.color(), move.toStep() + direction) : null;
+        PieceInteractionEvent interaction = new PieceInteractionEvent(
+                capture, protection, blockedBy, changesToBlocks(before));
+        if (state.isFinished(piece)) state.log(player.name() + " הכניס כלי לבית הסיום!");
+        return new CommittedMove(piece, to, interaction, rankIfAllPiecesHome(player));
     }
 
-    /** FR-45: ranks the player when all four pieces are home. Returns the finish event, or null. */
+    /** Detect another question, otherwise finish the turn, then publish movement events. */
+    private void completeMove(Move move, Player player, CommittedMove committed) {
+        Question question = openQuestionForLanding(committed.piece(), committed.destination());
+        boolean gameOver = question == null && endTurnAfterMove(player, committed.finish() != null);
+        notifyMoved(move, committed.interaction(), committed.finish(), question);
+        if (gameOver) notifyGameOver();
+    }
+
+    /** Inform observers when a completed move ends the game. */
+    private void notifyGameOver() {
+        for (GameListener listener : List.copyOf(listeners)) listener.onGameOver(state.result());
+    }
+
+    /** FR-33–FR-35: open one question, remember its piece and pause the current turn. */
+    private Question openQuestionForLanding(Piece piece, Position destination) {
+        if (questionService == null || destination == null || state.isFinished(piece)) return null;
+        Optional<QuestionLevel> level = Objects.requireNonNull(
+                questionLevelResolver.apply(destination), "question resolver result");
+        if (level.isEmpty()) return null;
+        Question question = questionService.startQuestion(level.get());
+        state.beginQuestion(question, piece.id());
+        state.log("שאלה ברמה " + question.level() + " עבור " + state.currentPlayer().name());
+        return question;
+    }
+
+    /** FR-36/FR-37: validate an answer, publish the result and immediately apply its movement. */
+    public Optional<QuestionService.AnswerResult> submitQuestionAnswer(int selectedIndex) {
+        if (state.phase() != GameState.Phase.WAITING_FOR_QUESTION_ANSWER || questionService == null) {
+            rejectAction("אין שאלה שממתינה לתשובה.");
+            return Optional.empty();
+        }
+        final QuestionService.AnswerResult answer;
+        try {
+            answer = questionService.submitAnswer(selectedIndex);
+        } catch (IllegalArgumentException error) {
+            rejectAction("בחר אחת מארבע אפשרויות התשובה.");
+            return Optional.empty();
+        }
+        int pieceId = state.questionPieceId().orElseThrow();
+        state.recordQuestionAnswer(answer);
+        state.setFeedbackMessage(answer.correct() ? "תשובה נכונה!" : "תשובה שגויה.");
+        state.log(answer.correct() ? "תשובה נכונה!" : "תשובה שגויה.");
+        for (GameListener listener : List.copyOf(listeners)) listener.onQuestionAnswered(answer, pieceId);
+        applyQuestionEffect();
+        return Optional.of(answer);
+    }
+
+    /** FR-37: apply forward or backward movement with the usual blocking and capture rules. */
+    private void applyQuestionEffect() {
+        QuestionService.AnswerResult answer = state.pendingQuestionResult().orElseThrow();
+        Piece piece = state.piece(state.questionPieceId().orElseThrow());
+        Player player = state.currentPlayer();
+        int currentStep = piece.step();
+        int requestedStep = currentStep + questionMovementRules.signedSteps(answer);
+        int finish = state.board().finishStep();
+
+        // A question does not bypass the exact-finish rule or move backwards into the castle.
+        int targetStep = requestedStep > finish ? currentStep : Math.max(0, requestedStep);
+        int reachableStep = MoveValidator.furthestReachable(state, piece, targetStep);
+        state.clearQuestion(); // Unblock a subsequent question triggered by the destination.
+
+        if (reachableStep == currentStep) {
+            state.log("השאלה הסתיימה ללא שינוי במיקום הכלי.");
+            boolean gameOver = endTurnAfterMove(player, false);
+            notifyChanged();
+            if (gameOver) notifyGameOver();
+            return;
+        }
+        Move effectMove = new Move(piece.id(), currentStep, reachableStep,
+                false, reachableStep != targetStep);
+        state.log((reachableStep > currentStep ? "התקדמות " : "חזרה ")
+                + Math.abs(reachableStep - currentStep) + " צעדים בעקבות השאלה.");
+        apply(effectMove);
+    }
+
+    /** FR-45: rank the player when all four pieces are home. */
     private PlayerFinishEvent rankIfAllPiecesHome(Player player) {
         if (!RankingManager.rankIfAllPiecesHome(state, player)) return null;
         state.log("מקום " + player.rank() + ": " + player.name());
         return new PlayerFinishEvent(player.index(), player.name(), player.color(), player.rank());
     }
 
-    /**
-     * FR-47, FR-19, FR-21, FR-22, FR-46: ends the game, gives the UltraBoost surprise throw,
-     * gives another roll after a six (not to a player who has just finished or lost the turn),
-     * or passes the turn. Returns true if the game ended.
-     */
+    /** Preserve Gal's special/extra-turn priorities after completing a question or move. */
     private boolean endTurnAfterMove(Player player, boolean justFinished) {
         if (justFinished && RankingManager.isGameOver(state)) {
             endGame();
@@ -205,7 +327,7 @@ public final class GameEngine {
         return List.copyOf(changes);
     }
 
-    /** FR-47, FR-48: stops the clock, ranks the last player and locks the game. */
+    /** FR-47, FR-48: stop the clock, rank the last player and lock the game. */
     private void endGame() {
         gameClock.stop();
         RankingManager.rankRemainingPlayers(state);
@@ -219,18 +341,22 @@ public final class GameEngine {
     }
 
     /** Advance to the next unfinished player. */
-    private void passTurn() {
-        TurnManager.passTurn(state);
-    }
+    private void passTurn() { TurnManager.passTurn(state); }
 
-    /** Publish immutable movement and interaction events before refreshing observers. */
-    private void notifyMoved(Move move, PieceInteractionEvent interaction, PlayerFinishEvent playerFinish) {
+    /** Publish movement and question events before refreshing the observers' view of the state. */
+    private void notifyMoved(Move move, PieceInteractionEvent interaction,
+                             PlayerFinishEvent playerFinish, Question question) {
         for (GameListener listener : List.copyOf(listeners)) listener.onPieceMoved(move);
         if (interaction.hasVisualEffect()) {
             for (GameListener listener : List.copyOf(listeners)) listener.onPieceInteraction(interaction);
         }
         if (playerFinish != null) {
             for (GameListener listener : List.copyOf(listeners)) listener.onPlayerFinished(playerFinish);
+        }
+        if (question != null) {
+            for (GameListener listener : List.copyOf(listeners)) {
+                listener.onQuestionRequested(question, move.pieceId());
+            }
         }
         notifyChanged();
     }
