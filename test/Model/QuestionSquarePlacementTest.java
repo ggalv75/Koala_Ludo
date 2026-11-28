@@ -18,7 +18,8 @@ class QuestionSquarePlacementTest {
             assertEquals(2, board.count(CellType.QUESTION_MEDIUM));
             assertEquals(2, board.count(CellType.QUESTION_HARD));
             assertEquals(8, board.count(CellType.SAFE));
-            assertEquals(90, board.count(CellType.REGULAR));
+            assertEquals(2, board.count(CellType.SURPRISE));
+            assertEquals(88, board.count(CellType.REGULAR));
             assertEquals(136, board.cells().size());
             assertEquals(4, board.count(CellType.START));
             assertEquals(8, board.count(CellType.ARROW));

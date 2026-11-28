@@ -13,11 +13,11 @@ import org.junit.jupiter.api.Test;
 class QuestionRepositoryIntegrityTest {
 
     /** Test a JSON bank without replacing the real project resource. */
-    private static void assertInvalid(String content) throws IOException {
+    private static IOException assertInvalid(String content) throws IOException {
         Path temp = Files.createTempFile("koala-invalid-questions", ".json");
         try {
             Files.writeString(temp, content, StandardCharsets.UTF_8);
-            assertThrows(IOException.class, () -> QuestionRepository.fromFile(temp, new Random(1)));
+            return assertThrows(IOException.class, () -> QuestionRepository.fromFile(temp, new Random(1)));
         } finally {
             Files.deleteIfExists(temp);
         }
@@ -25,12 +25,15 @@ class QuestionRepositoryIntegrityTest {
 
     /** FR-60: reject a bank with fewer than thirty questions. */
     @Test void rejectsTooSmallQuestionBank() throws IOException {
-        String json = Files.readString(Path.of("src", "questions.json"), StandardCharsets.UTF_8);
+        String json = Files.readString(Path.of("src", "questions.json"), StandardCharsets.UTF_8)
+                .replace("\r\n", "\n").replace("\r", "\n");
         int last = json.lastIndexOf(",\n    {");
         // Drop the final question by replacing its object with whitespace.
         int lastEnd = json.lastIndexOf("    }");
         assertTrue(last > 0 && lastEnd > last);
-        assertInvalid(json.substring(0, last) + json.substring(lastEnd + 5));
+        IOException error = assertInvalid(json.substring(0, last) + json.substring(lastEnd + 5));
+        assertTrue(error.getMessage().contains("at least 30"),
+                "The reduced bank must be valid JSON rejected specifically for its size");
     }
 
     /** FR-34: reject a bank that has no questions at HARD difficulty. */
