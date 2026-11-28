@@ -129,7 +129,7 @@ public final class SurpriseStrategies {
             return SurpriseResolution.none();
         }
     }
-    /** FR-44: schedule the special throw implemented by the dice subsystem. */
+    /** FR-44: schedule the special throw for the owner of the landing piece. */
     public static final class UltraBoostRollStrategy
             implements SurpriseStrategy {
 
@@ -137,7 +137,10 @@ public final class SurpriseStrategies {
         public SurpriseResolution apply(
                 GameState state, int pieceId) {
 
-            TurnManager.grantSpecialRoll(state);
+            Player owner = state.players().get(
+                    state.piece(pieceId).ownerIndex());
+
+            TurnManager.grantSpecialRoll(state, owner);
 
             return SurpriseResolution.none();
         }
