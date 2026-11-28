@@ -2,6 +2,7 @@ package Model;
 
 import java.time.Clock;
 import java.util.*;
+import java.util.function.Function;
 
 /**
  * Entry point to the game rules and subject of the Observer pattern.
@@ -11,6 +12,9 @@ import java.util.*;
 public final class GameEngine {
 
     private final GameState state;
+    private QuestionService questionService;
+    private Function<Position, Optional<QuestionLevel>> questionLevelResolver;
+    private QuestionMovementRules questionMovementRules;
 
     /** Template Method: the level's regular throw. */
     private final DiceThrow regularThrow;
@@ -153,10 +157,51 @@ public final class GameEngine {
         listeners.remove(listener);
     }
 
+    /** Configure questions using the exact answer movement specified in Ludo Project-V2, p. 4. */
+    public void configureQuestions(QuestionService service) {
+        configureQuestions(service, this::questionLevelFromBoard, QuestionMovementRules.projectRules());
+    }
+
+    /** Configure question logic with explicitly approved forward movement rules. */
+    public void configureQuestions(QuestionService service, QuestionMovementRules movementRules) {
+        configureQuestions(service, this::questionLevelFromBoard, movementRules);
+    }
+
+    /** Inject square detection for deterministic tests and future board configurations. */
+    void configureQuestions(QuestionService service,
+                            Function<Position, Optional<QuestionLevel>> resolver) {
+        configureQuestions(service, resolver, QuestionMovementRules.projectRules());
+    }
+
+    /** Configure a question resolver and movement rules before the first die roll. */
+    void configureQuestions(QuestionService service, Function<Position, Optional<QuestionLevel>> resolver,
+                            QuestionMovementRules movementRules) {
+        if (questionService != null) throw new IllegalStateException("Questions already configured");
+        if (state.phase() != GameState.Phase.WAITING_FOR_ROLL || state.latestRoll() != null) {
+            throw new IllegalStateException("Configure questions before the first roll");
+        }
+        questionService = Objects.requireNonNull(service, "service");
+        questionLevelResolver = Objects.requireNonNull(resolver, "resolver");
+        questionMovementRules = Objects.requireNonNull(movementRules, "movementRules");
+    }
+
+    /** FR-33: resolve Medium-board question squares to their matching difficulty. */
+    private Optional<QuestionLevel> questionLevelFromBoard(Position position) {
+        if (position == null) return Optional.empty();
+        Cell cell = state.board().cellAt(position);
+        if (cell == null) return Optional.empty();
+        return switch (cell.type()) {
+            case QUESTION_EASY -> Optional.of(QuestionLevel.EASY);
+            case QUESTION_MEDIUM -> Optional.of(QuestionLevel.MEDIUM);
+            case QUESTION_HARD -> Optional.of(QuestionLevel.HARD);
+            default -> Optional.empty();
+        };
+    }
+
     /** FR-15 to FR-21: perform a throw and determine available actions. */
     public void rollDice() {
         if (state.phase() != GameState.Phase.WAITING_FOR_ROLL) {
-            rejectAction("בחר כלי לפני הטלה נוספת.");
+            rejectAction(isWaitingForQuestion() ? "יש להשלים את השאלה לפני ההטלה הבאה." : "בחר כלי לפני הטלה נוספת.");
             return;
         }
 
@@ -213,6 +258,11 @@ public final class GameEngine {
         notifyChanged();
     }
 
+    private boolean isWaitingForQuestion() {
+        return state.phase() == GameState.Phase.WAITING_FOR_QUESTION_ANSWER
+                || state.phase() == GameState.Phase.WAITING_FOR_QUESTION_EFFECT;
+    }
+
     /** Report an invalid action without terminating the game. */
     private void rejectAction(String hint) {
         state.setFeedbackMessage(
@@ -234,7 +284,7 @@ public final class GameEngine {
         if (state.phase()
                 != GameState.Phase.WAITING_FOR_MOVE) {
 
-            rejectAction("הטל קובייה לפני בחירת כלי.");
+            rejectAction(isWaitingForQuestion() ? "יש להשלים את השאלה לפני בחירת כלי נוסף." : "הטל קובייה לפני בחירת כלי.");
             return false;
         }
 
@@ -327,6 +377,17 @@ public final class GameEngine {
             Cell landing = state.board().cellAt(
                     piece.color(), piece.step());
 
+            Question question = openQuestionForLanding(piece, state.positionOf(piece));
+            if (question != null) {
+                pendingNotifications.add(() -> {
+                    for (GameListener listener : List.copyOf(listeners)) {
+                        listener.onQuestionRequested(question, piece.id());
+                    }
+                });
+                flushNotifications();
+                return;
+            }
+
             if (landing == null
                     || landing.type() != CellType.SURPRISE) {
 
@@ -380,6 +441,67 @@ public final class GameEngine {
                 activePlayer.isFinished());
 
         flushNotifications();
+    }
+
+    /** FR-33–FR-35: open one question, remember its piece and pause the current turn. */
+    private Question openQuestionForLanding(Piece piece, Position destination) {
+        if (questionService == null || destination == null || state.isFinished(piece)) return null;
+        Optional<QuestionLevel> level = Objects.requireNonNull(
+                questionLevelResolver.apply(destination), "question resolver result");
+        if (level.isEmpty()) return null;
+        Question question = questionService.startQuestion(level.get());
+        state.beginQuestion(question, piece.id());
+        state.log("שאלה ברמה " + question.level() + " עבור " + state.currentPlayer().name());
+        return question;
+    }
+
+    /** FR-36/FR-37: validate an answer, publish the result and immediately apply its movement. */
+    public Optional<QuestionService.AnswerResult> submitQuestionAnswer(int selectedIndex) {
+        if (state.phase() != GameState.Phase.WAITING_FOR_QUESTION_ANSWER || questionService == null) {
+            rejectAction("אין שאלה שממתינה לתשובה.");
+            return Optional.empty();
+        }
+        final QuestionService.AnswerResult answer;
+        try {
+            answer = questionService.submitAnswer(selectedIndex);
+        } catch (IllegalArgumentException error) {
+            rejectAction("בחר אחת מארבע אפשרויות התשובה.");
+            return Optional.empty();
+        }
+        int pieceId = state.questionPieceId().orElseThrow();
+        state.recordQuestionAnswer(answer);
+        state.setFeedbackMessage(answer.correct() ? "תשובה נכונה!" : "תשובה שגויה.");
+        state.log(answer.correct() ? "תשובה נכונה!" : "תשובה שגויה.");
+        for (GameListener listener : List.copyOf(listeners)) listener.onQuestionAnswered(answer, pieceId);
+        applyQuestionEffect();
+        return Optional.of(answer);
+    }
+
+    /** FR-37: apply forward or backward movement with the usual blocking and capture rules. */
+    private void applyQuestionEffect() {
+        QuestionService.AnswerResult answer = state.pendingQuestionResult().orElseThrow();
+        Piece piece = state.piece(state.questionPieceId().orElseThrow());
+        Player player = state.currentPlayer();
+        int currentStep = piece.step();
+        int requestedStep = currentStep + questionMovementRules.signedSteps(answer);
+        int finish = state.board().finishStep();
+
+        // A question does not bypass the exact-finish rule or move backwards into the castle.
+        int targetStep = requestedStep > finish ? currentStep : Math.max(0, requestedStep);
+        int reachableStep = MoveValidator.furthestReachable(state, piece, targetStep);
+        state.clearQuestion(); // Unblock a subsequent question triggered by the destination.
+
+        if (reachableStep == currentStep) {
+            state.log("השאלה הסתיימה ללא שינוי במיקום הכלי.");
+            endTurnAfterMove(player, player.isFinished());
+            flushNotifications();
+            return;
+        }
+        Move effectMove = new Move(piece.id(), currentStep, reachableStep,
+                false, reachableStep != targetStep);
+        state.log((reachableStep > currentStep ? "התקדמות " : "חזרה ")
+                + Math.abs(reachableStep - currentStep) + " צעדים בעקבות השאלה.");
+        apply(effectMove);
     }
 
     /** Offer movable opponent pawns; roll only after a valid selection. */

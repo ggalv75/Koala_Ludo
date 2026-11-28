@@ -15,6 +15,12 @@ public interface GameListener {
     /** Announce a drawn surprise before resolving its effect. */
     default void onSurpriseDrawn(SurpriseEvent event) { }
 
+    /** FR-33–FR-35: notify observers when a piece must answer a new question. */
+    default void onQuestionRequested(Question question, int pieceId) { }
+
+    /** FR-36: publish the chosen answer's correctness without exposing the answer key. */
+    default void onQuestionAnswered(QuestionService.AnswerResult result, int pieceId) { }
+
     /** Notify listeners that the current game state has changed. */
     default void onStateChanged(GameState state) { }
 

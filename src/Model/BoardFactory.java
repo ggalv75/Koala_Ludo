@@ -47,6 +47,7 @@ public abstract class BoardFactory {
 
         placeRandomSquares(cells, CellType.SAFE, difficulty.safeSquares(), random);
         placeRandomSquares(cells, CellType.SURPRISE, difficulty.surpriseSquares(), random);
+        QuestionSquarePlacer.place(cells, difficulty.questionSquaresPerLevel(), random);
 
         return new Board(difficulty, cells, layout.routes(), layout.castleCorners(), layout.centerCorner());
     }
@@ -72,4 +73,5 @@ public abstract class BoardFactory {
         }
     }
 }
+
 

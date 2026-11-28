@@ -5,8 +5,8 @@ package Model;
  * and multiplier die selection (FR-15).
  */
 public enum Difficulty {
-    EASY("קל", 15, 52, 5, 4, 4, 0, MultiplierDie.NONE),
-    MEDIUM("בינוני", 17, 116, 5, 8, 8, 2, MultiplierDie.BOOST);
+    EASY("קל", 15, 52, 5, 4, 4, 0, MultiplierDie.NONE, 0),
+    MEDIUM("בינוני", 17, 116, 5, 8, 8, 2, MultiplierDie.BOOST, 2);
 
     private final String displayName;
     private final int boardSize;
@@ -16,8 +16,9 @@ public enum Difficulty {
     private final int safeSquares;
     private final int surpriseSquares;
     private final MultiplierDie multiplierDie;
+    private final int questionSquaresPerLevel;
 
-    Difficulty(String displayName, int boardSize, int trackSquares, int homePathSquares, int arrowSquares, int safeSquares, int surpriseSquares, MultiplierDie multiplierDie) {
+    Difficulty(String displayName, int boardSize, int trackSquares, int homePathSquares, int arrowSquares, int safeSquares, int surpriseSquares, MultiplierDie multiplierDie, int questionSquaresPerLevel) {
         this.displayName = displayName;
         this.boardSize = boardSize;
         this.trackSquares = trackSquares;
@@ -26,6 +27,7 @@ public enum Difficulty {
         this.safeSquares = safeSquares;
         this.surpriseSquares = surpriseSquares;
         this.multiplierDie = multiplierDie;
+        this.questionSquaresPerLevel = questionSquaresPerLevel;
     }
 
     public String displayName() { return displayName; }
@@ -36,6 +38,7 @@ public enum Difficulty {
     public int safeSquares() { return safeSquares; }
     /** Number of randomly placed surprise squares (FR-13). */
     public int surpriseSquares() { return surpriseSquares; }
+    public int questionSquaresPerLevel() { return questionSquaresPerLevel; }
     public MultiplierDie multiplierDie() { return multiplierDie; }
 
     @Override

@@ -561,8 +561,10 @@ public final class BoardCanvas extends JPanel {
             case START, HOME ->
                     Theme.boardPathColorOf(c.color());
 
-            case SAFE, SURPRISE ->
-                    Theme.SAFE_SOFT;
+            case SAFE, SURPRISE -> Theme.SAFE_SOFT;
+            case QUESTION_EASY -> new Color(210, 245, 210);
+            case QUESTION_MEDIUM -> new Color(255, 245, 180);
+            case QUESTION_HARD -> new Color(255, 210, 210);
 
             case ARROW, REGULAR ->
                     Theme.SURFACE;
@@ -613,6 +615,9 @@ public final class BoardCanvas extends JPanel {
                             cy,
                             Theme.INK,
                             (int) (cell * 0.7));
+
+            case QUESTION_EASY, QUESTION_MEDIUM, QUESTION_HARD ->
+                drawText(g, "?", cx, cy, Theme.INK, (int) (cell * 0.7));
 
             case ARROW ->
                     drawArrow(
