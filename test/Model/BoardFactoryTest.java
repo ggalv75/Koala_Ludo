@@ -235,3 +235,4 @@ class BoardFactoryTest {
         assertTrue(layouts.size() > 1, "SAFE positions did not change between games");
     }
 }
+

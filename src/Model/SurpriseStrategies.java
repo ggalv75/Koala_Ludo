@@ -115,20 +115,20 @@ public final class SurpriseStrategies {
     }
 
     /** FR-43: use the existing turn rules for the active player. */
+    /** Penalize the owner of the piece that landed on the surprise. */
     public static final class LoseNextTurnStrategy
             implements SurpriseStrategy {
 
         @Override
-        public SurpriseResolution apply(
-                GameState state, int pieceId) {
+        public SurpriseResolution apply(GameState state, int pieceId) {
+            Player owner = state.players().get(
+                    state.piece(pieceId).ownerIndex());
 
-            TurnManager.loseNextTurn(
-                    state, state.currentPlayer());
+            TurnManager.loseNextTurn(state, owner);
 
             return SurpriseResolution.none();
         }
     }
-
     /** FR-44: schedule the special throw implemented by the dice subsystem. */
     public static final class UltraBoostRollStrategy
             implements SurpriseStrategy {
