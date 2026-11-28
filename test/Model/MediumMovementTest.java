@@ -22,7 +22,11 @@ class MediumMovementTest {
         List<Move> moves = MoveValidator.legalMoves(state, new DiceRoll(3));
         assertTrue(moves.stream().anyMatch(m -> m.pieceId() == piece.id() && m.toStep() == 59));
         assertEquals(CellType.ARROW, state.board().cellAt(color, 57).type());
-        assertEquals(CellType.REGULAR, state.board().cellAt(color, 58).type());
+        // Random SAFE/SURPRISE/QUESTION cells may occupy this track position.
+        // The transition geometry, rather than its random decoration, is fixed.
+        Position inner = new MediumBoardLayout().routes().get(color).get(58);
+        assertEquals(inner, state.board().positionOf(color, 58));
+        assertEquals(CellType.REGULAR, new MediumBoardLayout().fixedCells().get(inner).type());
     }
 
     @ParameterizedTest

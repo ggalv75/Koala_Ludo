@@ -88,7 +88,22 @@ public final class TurnManager {
 
     /** FR-21, FR-44: the current player's next throw is the special UltraBoost throw, at any level. */
     static void grantSpecialRoll(GameState state) {
-        state.turnState().setSpecialRollPending(true);
+        grantSpecialRoll(state, state.currentPlayer());
+    }
+
+    /**
+     * FR-44, FR-25: the special UltraBoost throw belongs to the owner of the piece that drew it.
+     * For the current player it comes right after the move. For another player (a piece moved there
+     * in a chain, e.g. by FR-40) it cannot be "immediate" in someone else's turn, so it becomes the
+     * first throw of that player's next turn. This is a team decision; the files do not cover it.
+     */
+    static void grantSpecialRoll(GameState state, Player player) {
+        if (player == state.currentPlayer()) {
+            state.turnState().setSpecialRollPending(true);
+            return;
+        }
+        state.turnState().deferSpecialRoll(player.index());
+        state.log(player.name() + " יקבל/תקבל הטלת UltraBoost מיוחדת בתחילת התור הבא");
     }
 
     /**
@@ -101,7 +116,8 @@ public final class TurnManager {
 
     /**
      * FR-18, FR-46, FR-22: the turn passes to the next player in order who has not finished.
-     * A player marked to lose a turn is skipped once. Only the active roll is cleared; the die
+     * A player marked to lose a turn is skipped once. A deferred UltraBoost throw (FR-44) starts the
+     * new player's turn. Only the active roll is cleared; the die
      * keeps showing {@link GameState#latestRoll()}.
      */
     static void passTurn(GameState state) {
@@ -114,6 +130,8 @@ public final class TurnManager {
             Player candidate = players.get(next);
             if (candidate.isFinished()) continue;
             if (turn.takeLostTurn(candidate.index())) {
+                // FR-22: a skipped turn also cancels a deferred UltraBoost throw, whatever came first.
+                turn.takeDeferredSpecialRoll(candidate.index());
                 state.log(candidate.name() + " מפסיד/ה את התור הזה");
                 continue;
             }
@@ -122,6 +140,7 @@ public final class TurnManager {
 
         state.setCurrentPlayerIndex(next);
         turn.startNewTurn();
+        if (turn.takeDeferredSpecialRoll(next)) turn.setSpecialRollPending(true);
         state.setLastRoll(null);
         state.setLegalMoves(List.of());
         state.setPhase(GameState.Phase.WAITING_FOR_ROLL);

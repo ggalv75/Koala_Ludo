@@ -5,7 +5,7 @@ import java.util.Set;
 
 /**
  * Turn bookkeeping that is not part of the board: the six streak (FR-20), a pending
- * UltraBoost surprise throw (FR-21), an extra roll kept for later (FR-19) and players who lose
+ * UltraBoost surprise throw (FR-21), one kept for another player's next turn (FR-44), an extra roll kept for later (FR-19) and players who lose
  * their next turn (FR-22). Changed only through {@link TurnManager}.
  */
 final class TurnState {
@@ -14,6 +14,7 @@ final class TurnState {
     private boolean extraRollOwed;
     private boolean turnForfeited;
     private final Set<Integer> playersLosingNextTurn = new HashSet<>();
+    private final Set<Integer> playersWithDeferredSpecialRoll = new HashSet<>();
 
     /** Current streak of sixes on the step die. */
     int consecutiveSixes() { return consecutiveSixes; }
@@ -32,6 +33,15 @@ final class TurnState {
         return pending;
     }
 
+    /** FR-44, FR-25: another player's UltraBoost surprise throw waits for that player's next turn. */
+    void deferSpecialRoll(int playerIndex) { playersWithDeferredSpecialRoll.add(playerIndex); }
+
+    /** Check whether a player has an UltraBoost surprise throw waiting for their next turn. */
+    boolean hasDeferredSpecialRoll(int playerIndex) { return playersWithDeferredSpecialRoll.contains(playerIndex); }
+
+    /** Returns true once for a player whose deferred surprise throw starts this turn, and clears it. */
+    boolean takeDeferredSpecialRoll(int playerIndex) { return playersWithDeferredSpecialRoll.remove(playerIndex); }
+
     /** FR-19: a six whose extra roll waits until the surprise throw is done. */
     void oweExtraRoll() { extraRollOwed = true; }
 
@@ -48,6 +58,8 @@ final class TurnState {
     /** FR-22: mark a player to lose their next turn; ends the current turn if it is theirs. */
     void loseNextTurn(int playerIndex, boolean isCurrentPlayer) {
         playersLosingNextTurn.add(playerIndex);
+        // FR-22: the lost turn is the one the deferred throw was waiting for, so it is cancelled too.
+        playersWithDeferredSpecialRoll.remove(playerIndex);
         if (isCurrentPlayer) {
             turnForfeited = true;
             specialRollPending = false;

@@ -9,7 +9,7 @@ import java.util.Random;
 
 /**
  * Factory Method creator for Easy and Medium game boards.
- * Builds board layouts and places random SAFE squares.
+ * Builds board layouts and places random SAFE and SURPRISE squares.
  * Implements board construction requirements FR-07–FR-14.
  */
 public abstract class BoardFactory {
@@ -45,15 +45,19 @@ public abstract class BoardFactory {
             throw new IllegalStateException("Invalid track size: " + trackCount);
         }
 
-        placeSafeSquares(cells, difficulty.safeSquares(), random);
+        placeRandomSquares(cells, CellType.SAFE, difficulty.safeSquares(), random);
+        placeRandomSquares(cells, CellType.SURPRISE, difficulty.surpriseSquares(), random);
+        QuestionSquarePlacer.place(cells, difficulty.questionSquaresPerLevel(), random);
 
         return new Board(difficulty, cells, layout.routes(), layout.castleCorners(), layout.centerCorner());
     }
 
     /**
-     * Places safe squares on distinct regular track positions.
+     * Places special squares on free regular positions without replacing fixed cells.
      */
-    private static void placeSafeSquares(Map<Position, Cell> cells, int count, Random random) {
+    private static void placeRandomSquares(Map<Position, Cell> cells,
+                                           CellType type, int count, Random random) {
+        if (count == 0) return;
         List<Position> free = new ArrayList<>();
         for (Map.Entry<Position, Cell> entry : cells.entrySet()) {
         	if (entry.getValue().type() == CellType.REGULAR && entry.getValue().color() == null) {
@@ -61,11 +65,12 @@ public abstract class BoardFactory {
         	}
         }
         if (count < 0 || count > free.size()) {
-            throw new IllegalArgumentException("Invalid safe square count: " + count);
+            throw new IllegalArgumentException("Invalid " + type + " square count: " + count);
         }
         Collections.shuffle(free, random);
         for (int i = 0; i < count; i++) {
-            cells.put(free.get(i), new Cell(CellType.SAFE, null));
+            cells.put(free.get(i), new Cell(type, null));
         }
     }
 }
+
